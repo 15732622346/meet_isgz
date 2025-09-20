@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>LiveKit连接测试</title>
+    <meta charset="utf-8">
+</head>
+<body>
+    <h1>LiveKit连接测试</h1>
+    <div id="status">正在测试...</div>
+    <div id="log"></div>
+
+    <script>
+        const log = document.getElementById('log');
+        const status = document.getElementById('status');
+        
+        function addLog(message) {
+            const div = document.createElement('div');
+            div.textContent = new Date().toLocaleTimeString() + ': ' + message;
+            log.appendChild(div);
+            console.log(message);
+        }
+
+        // 测试WebSocket连接
+        function testWebSocket() {
+            addLog('开始测试WebSocket连接...');
+            
+            const wsUrl = 'ws://192.168.1.84:7880';
+            addLog('连接URL: ' + wsUrl);
+            
+            const ws = new WebSocket(wsUrl);
+            
+            ws.onopen = function(event) {
+                addLog('✅ WebSocket连接成功!');
+                status.textContent = '✅ 连接成功';
+                status.style.color = 'green';
+                ws.close();
+            };
+            
+            ws.onerror = function(error) {
+                addLog('❌ WebSocket连接失败: ' + error);
+                status.textContent = '❌ 连接失败';
+                status.style.color = 'red';
+            };
+            
+            ws.onclose = function(event) {
+                addLog('WebSocket连接关闭: code=' + event.code + ', reason=' + event.reason);
+            };
+            
+            // 10秒超时
+            setTimeout(() => {
+                if (ws.readyState === WebSocket.CONNECTING) {
+                    addLog('❌ 连接超时');
+                    status.textContent = '❌ 连接超时';
+                    status.style.color = 'red';
+                    ws.close();
+                }
+            }, 10000);
+        }
+
+        // 测试HTTP连接
+        function testHTTP() {
+            addLog('开始测试HTTP连接...');
+            
+            const httpUrl = 'http://192.168.1.84:7880';
+            addLog('HTTP URL: ' + httpUrl);
+            
+            fetch(httpUrl)
+                .then(response => {
+                    addLog('✅ HTTP连接成功! Status: ' + response.status);
+                    return response.text();
+                })
+                .then(data => {
+                    addLog('HTTP响应: ' + data.substring(0, 100) + '...');
+                    testWebSocket(); // HTTP成功后测试WebSocket
+                })
+                .catch(error => {
+                    addLog('❌ HTTP连接失败: ' + error.message);
+                    status.textContent = '❌ HTTP连接失败';
+                    status.style.color = 'red';
+                });
+        }
+
+        // 开始测试
+        testHTTP();
+    </script>
+</body>
+</html> 

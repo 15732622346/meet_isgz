@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>LiveKit API Gateway 示例 - 用户登录 v1.1</title>
+    <style>
+        /* 基础样式 */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+            overflow: hidden;
+            width: 100%;
+            max-width: 600px;
+            animation: fadeInUp 0.6s ease-out;
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px 20px;
+            text-align: center;
+        }
+
+        .header h1 {
+            margin-bottom: 10px;
+            font-size: 26px;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 14px;
+        }
+
+        .content {
+            padding: 30px;
+        }
+
+        /* 安全提示 */
+        .security-notice {
+            background: #e8f5e8;
+            border: 2px solid #4caf50;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .security-notice h3 {
+            color: #2e7d32;
+            margin-bottom: 10px;
+        }
+        
+        .security-notice ul {
+            color: #388e3c;
+            margin-left: 20px;
+        }
+
+        .status-indicator {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: center;
+            font-weight: 600;
+        }
+
+        .status-offline {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .status-online {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .status-loading {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #e1e5e9;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s ease;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .btn {
+            width: 100%;
+            padding: 12px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+        }
+
+        .user-info-section {
+            margin-top: 30px;
+            padding: 25px;
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            border-radius: 12px;
+            border-left: 5px solid #28a745;
+        }
+
+        .user-info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .info-card {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+        }
+
+        .info-label {
+            font-size: 12px;
+            color: #6c757d;
+            font-weight: 600;
+            text-transform: uppercase;
+            margin-bottom: 5px;
+        }
+
+        .info-value {
+            font-size: 16px;
+            color: #333;
+            font-weight: 600;
+        }
+
+        .token-section {
+            margin-top: 20px;
+        }
+
+        .token-display {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 12px;
+            word-break: break-all;
+            color: #495057;
+            max-height: 120px;
+            overflow-y: auto;
+            border: 1px solid #dee2e6;
+        }
+
+        .message {
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+            font-weight: 600;
+        }
+
+        .message-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .message-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .message-warning {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+
+        .loading-spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s ease-in-out infinite;
+            margin-right: 10px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                margin: 10px;
+            }
+            
+            .user-info-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🛡️ LiveKit API Gateway 示例</h1>
+            <p>安全的第三方站点登录认证演示</p>
+        </div>
+        
+        <div class="content">
+            <!-- 安全提示 -->
+            <div class="security-notice">
+                <h3>🔒 安全特性</h3>
+                <ul>
+                    <li>✅ API密钥完全隐藏，前端无法访问</li>
+                    <li>✅ 通过本地代理转发，避免CORS问题</li>
+                    <li>✅ 内置XSS防护，安全显示数据</li>
+                    <li>✅ 页面刷新强制退出登录，避免Token冲突</li>
+                    <li>✅ 完整的错误处理和重试机制</li>
+                </ul>
+            </div>
+
+            <!-- 连接状态指示器 -->
+            <div id="statusIndicator" class="status-indicator status-loading">
+                <span class="loading-spinner"></span>
+                正在初始化连接...
+            </div>
+
+            <!-- 消息显示区域 -->
+            <div id="messageContainer"></div>
+
+            <!-- 登录表单 -->
+            <div id="loginSection">
+                <form id="loginForm">
+                    <div class="form-group">
+                        <label for="username">用户名</label>
+                        <input type="text" id="username" name="username" required 
+                               placeholder="请输入用户名" autocomplete="username">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="password">密码</label>
+                        <input type="password" id="password" name="password" required 
+                               placeholder="请输入密码" autocomplete="current-password">
+                    </div>
+                    
+                    <button type="submit" class="btn" id="loginBtn">
+                        登录
+                    </button>
+                </form>
+            </div>
+
+            <!-- 用户信息显示区域 -->
+            <div id="userInfoSection" style="display: none;">
+                <div class="user-info-section">
+                    <h3 style="margin-bottom: 20px; color: #333;">👤 用户信息</h3>
+                    <div class="user-info-grid" id="userInfoGrid">
+                        <!-- 用户信息将通过JavaScript动态填充 -->
+                    </div>
+
+                    <!-- Token信息 -->
+                    <div class="token-section">
+                        <h4 style="color: #333; margin-bottom: 15px;">🎫 JWT Token</h4>
+                        
+                        <div class="token-display" id="accessTokenDisplay" style="max-height: 120px;">
+                            <!-- JWT Token 内容 -->
+                        </div>
+                        
+                        <div style="margin-top: 10px; padding: 10px; background: #fff3cd; border-radius: 5px; border-left: 4px solid #ffc107;">
+                            <small style="color: #856404;">
+                                ⚠️ 页面刷新将自动退出登录，避免Token冲突
+                            </small>
+                        </div>
+                    </div>
+
+                    <!-- 操作按钮 -->
+                    <button type="button" class="btn btn-danger" id="logoutBtn">
+                        退出登录
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 引入安全的API客户端库 -->
+    <script src="api-client.js?v=20250911a"></script>
+    
+    <script>
+        /**
+         * 安全的HTML转义函数（防止XSS攻击）
+         */
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        /**
+         * 登录应用类
+         * 使用安全的API Gateway代理模式
+         */
+        class LoginApp {
+            constructor() {
+                // 初始化API客户端（使用安全的代理模式，无敏感信息暴露）
+                this.apiClient = new LiveKitApiClient({
+                    gatewayUrl: '/gateway',     // 本地代理地址
+                    debug: false,               // 禁用调试输出
+                    retryAttempts: 2,           // 重试次数
+                    retryDelay: 1000           // 重试延迟
+                });
+                
+                this.currentUser = null;
+                this.tokens = {
+                    accessToken: null,
+                    refreshToken: null,
+                    expiresAt: null
+                };
+                this.refreshTimer = null;
+                this.isRefreshing = false;
+                
+                this.initializeElements();
+                this.init();
+            }
+
+            /**
+             * 初始化DOM元素引用
+             */
+            initializeElements() {
+                this.elements = {
+                    statusIndicator: document.getElementById('statusIndicator'),
+                    messageContainer: document.getElementById('messageContainer'),
+                    loginSection: document.getElementById('loginSection'),
+                    userInfoSection: document.getElementById('userInfoSection'),
+                    loginForm: document.getElementById('loginForm'),
+                    loginBtn: document.getElementById('loginBtn'),
+                    logoutBtn: document.getElementById('logoutBtn'),
+                    userInfoGrid: document.getElementById('userInfoGrid'),
+                    accessTokenDisplay: document.getElementById('accessTokenDisplay'),
+                    username: document.getElementById('username'),
+                    password: document.getElementById('password')
+                };
+            }
+
+            /**
+             * 应用初始化
+             */
+            async init() {
+                // 页面刷新强制退出登录，清理所有本地存储
+                await this.forceLogoutOnRefresh();
+                
+                this.setupEventListeners();
+                
+                // 设置初始状态为离线
+                this.updateStatus('offline', '请登录以开始使用');
+                
+                // 检查API连接
+                await this.checkApiConnection();
+            }
+
+            /**
+             * 页面刷新强制清理登录状态
+             */
+            async forceLogoutOnRefresh() {
+                // 检查是否有已登录的Token
+                const storedTokens = localStorage.getItem('livekit_tokens');
+                const storedUser = localStorage.getItem('livekit_user');
+                
+                if (storedTokens && storedUser) {
+                    try {
+                        // 解析存储的Token信息
+                        const tokens = JSON.parse(storedTokens);
+                        
+                        if (tokens.accessToken) {
+                            // 调用退出登录接口，强制更新服务器端用户状态
+                            await this.apiClient.callApi('/api/v1/auth/logout', null, {
+                                method: 'POST',
+                                headers: {
+                                    'Authorization': `Bearer ${tokens.accessToken}`
+                                }
+                            });
+                        }
+                    } catch (error) {
+                        // 静默处理错误，不影响页面正常加载
+                    }
+                    
+                    // 清理本地存储
+                    localStorage.removeItem('livekit_tokens');
+                    localStorage.removeItem('livekit_user');
+                }
+                
+                // 确保状态重置
+                this.currentUser = null;
+                this.tokens = {
+                    accessToken: null,
+                    refreshToken: null,
+                    expiresAt: null
+                };
+                
+                // 清理定时器
+                if (this.refreshTimer) {
+                    clearInterval(this.refreshTimer);
+                    this.refreshTimer = null;
+                }
+            }
+
+            /**
+             * 检查API连接
+             */
+            async checkApiConnection() {
+                try {
+                    // 简单的连接检查
+                    this.updateStatus('offline', 'API Gateway 就绪');
+                } catch (error) {
+                    this.updateStatus('offline', '连接失败');
+                }
+            }
+
+            /**
+             * 登录处理
+             */
+            async handleLogin(username, password) {
+                try {
+                    this.updateStatus('loading', '正在登录...');
+                    
+                    // 获取客户端IP（可选）
+                    const clientIP = await this.getClientIP();
+                    
+                    const requestData = {
+                        user_name: username,
+                        user_password: password,
+                        user_ip: clientIP
+                    };
+                    
+                    const response = await this.apiClient.callApi('/api/v1/auth/login', requestData, {
+                        method: 'POST'
+                    });
+
+                    if (response.data && response.data.success) {
+                        const data = response.data;
+                        // 保存用户信息和Token
+                        this.currentUser = {
+                            uid: data.uid,
+                            user_name: data.user_name,
+                            user_nickname: data.user_nickname,
+                            user_roles: data.user_roles,
+                            user_status: data.user_status,
+                            user_lastLoginTime: data.user_lastLoginTime,
+                            user_ip: data.user_ip,
+                            user_online: data.user_online,
+                            user_createTime: data.user_createTime
+                        };
+
+                        this.tokens = {
+                            accessToken: data.jwt_token,
+                            refreshToken: data.refresh_token,
+                            expiresAt: data.expires_at
+                        };
+
+                        // 保存到本地存储
+                        localStorage.setItem('livekit_user', JSON.stringify(this.currentUser));
+                        localStorage.setItem('livekit_tokens', JSON.stringify(this.tokens));
+                        
+                        // 显示用户信息
+                        this.showUserInfo();
+                        this.showMessage('success', data.message || '登录成功！');
+                        this.updateStatus('online', `欢迎，${this.currentUser.user_nickname}`);
+                        
+                        // 清空登录表单
+                        this.elements.loginForm.reset();
+                        
+                    } else {
+                        const errorMessage = response.data?.error || response.data?.message || '登录失败';
+                        this.showMessage('error', errorMessage);
+                        this.updateStatus('offline', '登录失败');
+                    }
+                } catch (error) {
+                    this.showMessage('error', `登录失败: ${error.message}`);
+                    this.updateStatus('offline', '连接失败');
+                }
+            }
+
+            /**
+             * 获取客户端IP地址
+             */
+            async getClientIP() {
+                try {
+                    const response = await fetch('https://api.ipify.org?format=json');
+                    const data = await response.json();
+                    return data.ip && data.ip.trim() !== '' ? data.ip.trim() : null;
+                } catch (error) {
+                    return null;
+                }
+            }
+
+            /**
+             * 退出登录
+             */
+            async handleLogout() {
+                try {
+                    const btn = this.elements.logoutBtn;
+                    btn.disabled = true;
+                    btn.innerHTML = '<span class="loading-spinner"></span>退出中...';
+
+                    // 调用退出API
+                    try {
+                        const response = await this.apiClient.callApi('/api/v1/auth/logout', null, {
+                            method: 'POST',
+                            headers: {
+                                'Authorization': `Bearer ${this.tokens.accessToken}`
+                            }
+                        });
+                    } catch (error) {
+                        // 静默处理API错误
+                    }
+
+                    // 清理本地状态
+                    this.clearStoredLogin();
+                    this.showMessage('success', '已成功退出登录');
+                    this.updateStatus('offline', '请登录以开始使用');
+                    
+                } finally {
+                    const btn = this.elements.logoutBtn;
+                    btn.disabled = false;
+                    btn.innerHTML = '退出登录';
+                }
+            }
+
+            /**
+             * 清理本地存储的登录信息
+             */
+            clearStoredLogin() {
+                localStorage.removeItem('livekit_user');
+                localStorage.removeItem('livekit_tokens');
+                
+                this.currentUser = null;
+                this.tokens = {
+                    accessToken: null,
+                    refreshToken: null,
+                    expiresAt: null
+                };
+                
+                if (this.refreshTimer) {
+                    clearInterval(this.refreshTimer);
+                    this.refreshTimer = null;
+                }
+                
+                // 显示登录表单，隐藏用户信息
+                this.elements.loginSection.style.display = 'block';
+                this.elements.userInfoSection.style.display = 'none';
+            }
+
+            /**
+             * 显示用户信息（安全渲染）
+             */
+            showUserInfo() {
+                if (!this.currentUser) return;
+
+                // 安全清空容器
+                while (this.elements.userInfoGrid.firstChild) {
+                    this.elements.userInfoGrid.removeChild(this.elements.userInfoGrid.firstChild);
+                }
+
+                const userInfoItems = [
+                    { label: '用户ID', value: this.currentUser.uid },
+                    { label: '用户名', value: this.currentUser.user_name },
+                    { label: '昵称', value: this.currentUser.user_nickname },
+                    { label: '角色', value: this.getRoleName(this.currentUser.user_roles) },
+                    { label: '状态', value: this.getStatusName(this.currentUser.user_status) },
+                    { label: '最后登录时间', value: this.currentUser.user_lastLoginTime || '未知' },
+                    { label: '登录IP', value: this.currentUser.user_ip || '未知' },
+                    { label: '在线状态', value: this.getOnlineStatus(this.currentUser.user_online) },
+                    { label: '注册时间', value: this.currentUser.user_createTime || '未知' }
+                ];
+
+                userInfoItems.forEach(item => {
+                    const cardDiv = document.createElement('div');
+                    cardDiv.className = 'info-card';
+
+                    const labelDiv = document.createElement('div');
+                    labelDiv.className = 'info-label';
+                    labelDiv.textContent = item.label;
+
+                    const valueDiv = document.createElement('div');
+                    valueDiv.className = 'info-value';
+                    // 使用安全的textContent避免XSS
+                    valueDiv.textContent = this.apiClient.escapeHtml(String(item.value));
+
+                    cardDiv.appendChild(labelDiv);
+                    cardDiv.appendChild(valueDiv);
+                    this.elements.userInfoGrid.appendChild(cardDiv);
+                });
+                
+                this.updateTokenDisplay();
+                
+                // 显示用户信息区域，隐藏登录表单
+                this.elements.loginSection.style.display = 'none';
+                this.elements.userInfoSection.style.display = 'block';
+            }
+
+            /**
+             * 更新Token显示
+             */
+            updateTokenDisplay() {
+                if (this.tokens.accessToken) {
+                    this.elements.accessTokenDisplay.textContent = this.tokens.accessToken;
+                }
+            }
+
+            /**
+             * 更新状态指示器
+             */
+            updateStatus(status, message) {
+                const statusEl = this.elements.statusIndicator;
+                statusEl.className = `status-indicator status-${status}`;
+                
+                let content = '';
+                switch (status) {
+                    case 'online':
+                        content = `✅ ${message}`;
+                        break;
+                    case 'offline':
+                        content = `🔴 ${message}`;
+                        break;
+                    case 'loading':
+                        content = `<span class="loading-spinner"></span>${message}`;
+                        break;
+                }
+                
+                statusEl.innerHTML = content;
+            }
+
+            /**
+             * 显示消息
+             */
+            showMessage(type, message) {
+                const container = this.elements.messageContainer;
+                const messageDiv = document.createElement('div');
+                messageDiv.className = `message message-${type}`;
+                messageDiv.textContent = message;
+                
+                // 清除旧消息
+                container.innerHTML = '';
+                container.appendChild(messageDiv);
+                
+                // 5秒后自动隐藏
+                setTimeout(() => {
+                    if (messageDiv.parentNode) {
+                        messageDiv.remove();
+                    }
+                }, 5000);
+            }
+
+            /**
+             * 设置按钮加载状态
+             */
+            setButtonLoading(buttonElement, isLoading, loadingText = '处理中...') {
+                if (isLoading) {
+                    buttonElement.disabled = true;
+                    buttonElement.dataset.originalText = buttonElement.innerHTML;
+                    buttonElement.innerHTML = `<span class="loading-spinner"></span>${loadingText}`;
+                } else {
+                    buttonElement.disabled = false;
+                    buttonElement.innerHTML = buttonElement.dataset.originalText || buttonElement.innerHTML.replace(/<span class="loading-spinner"><\/span>/, '');
+                }
+            }
+
+            /**
+             * 获取角色名称
+             */
+            getRoleName(roleId) {
+                const roleMap = {
+                    1: '普通会员',
+                    2: '主持人',
+                    3: '超级管理员'
+                };
+                return roleMap[roleId] || `角色${roleId}`;
+            }
+
+            /**
+             * 获取状态名称
+             */
+            getStatusName(status) {
+                return status == 1 ? '正常' : '禁用';
+            }
+
+            /**
+             * 获取在线状态名称
+             */
+            getOnlineStatus(online) {
+                return online == 1 ? '在线' : '离线';
+            }
+
+            /**
+             * 设置事件监听器
+             */
+            setupEventListeners() {
+                // 登录表单提交
+                this.elements.loginForm.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    
+                    const username = this.elements.username.value.trim();
+                    const password = this.elements.password.value.trim();
+                    
+                    if (!username || !password) {
+                        this.showMessage('warning', '请填写完整的登录信息');
+                        return;
+                    }
+
+                    this.setButtonLoading(this.elements.loginBtn, true, '登录中...');
+                    
+                    try {
+                        await this.handleLogin(username, password);
+                    } finally {
+                        this.setButtonLoading(this.elements.loginBtn, false);
+                    }
+                });
+
+                // 退出登录按钮
+                this.elements.logoutBtn.addEventListener('click', () => {
+                    this.handleLogout();
+                });
+            }
+        }
+        
+        // 页面加载完成后初始化应用
+        document.addEventListener('DOMContentLoaded', function() {
+            new LoginApp();
+        });
+    </script>
+</body>
+</html>

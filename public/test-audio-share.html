@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🔊 音频分享测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f0f2f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        }
+        .header {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .test-section {
+            border: 2px solid #e1e8ed;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .status-box {
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+            font-weight: bold;
+        }
+        .status-success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .status-warning {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            color: #856404;
+        }
+        .status-error {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            margin: 10px;
+            transition: all 0.3s;
+        }
+        .btn-primary {
+            background: #007bff;
+            color: white;
+        }
+        .btn-primary:hover {
+            background: #0056b3;
+            transform: translateY(-2px);
+        }
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+        .btn:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+        .instructions {
+            background: #e3f2fd;
+            border-left: 4px solid #2196f3;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .video-container {
+            width: 100%;
+            max-width: 500px;
+            height: 300px;
+            background: #000;
+            border-radius: 10px;
+            margin: 20px auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 18px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔊 屏幕分享音频测试</h1>
+            <p>测试系统音频捕获功能</p>
+        </div>
+
+        <div class="instructions">
+            <h3>📋 测试步骤：</h3>
+            <ol>
+                <li>确保使用 <strong>Chrome 浏览器</strong>（版本74+）</li>
+                <li>点击下方"开始测试"按钮</li>
+                <li>在弹出窗口中选择要分享的内容</li>
+                <li><strong>重要：勾选"分享系统音频"选项</strong></li>
+                <li>观察音频检测结果</li>
+            </ol>
+        </div>
+
+        <div class="test-section">
+            <h3>🎮 测试控制</h3>
+            <button id="startBtn" class="btn btn-primary" onclick="startTest()">
+                🚀 开始测试屏幕音频分享
+            </button>
+            <button id="stopBtn" class="btn btn-danger" onclick="stopTest()" disabled>
+                ⏹️ 停止测试
+            </button>
+
+            <div class="video-container" id="videoContainer">
+                📺 屏幕分享预览区域
+            </div>
+
+            <div id="statusContainer"></div>
+        </div>
+    </div>
+
+    <script>
+        let currentStream = null;
+
+        function showStatus(type, message) {
+            const container = document.getElementById('statusContainer');
+            const statusDiv = document.createElement('div');
+            statusDiv.className = `status-box status-${type}`;
+            statusDiv.innerHTML = message;
+            container.appendChild(statusDiv);
+            
+            // 自动滚动到底部
+            statusDiv.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        async function startTest() {
+            const startBtn = document.getElementById('startBtn');
+            const stopBtn = document.getElementById('stopBtn');
+            const videoContainer = document.getElementById('videoContainer');
+
+            try {
+                startBtn.disabled = true;
+                
+                // 清空之前的状态
+                document.getElementById('statusContainer').innerHTML = '';
+                
+                showStatus('warning', '🚀 开始请求屏幕分享权限...');
+                showStatus('warning', '💡 请在弹出窗口中勾选"分享系统音频"选项');
+
+                // 🎯 新的屏幕分享配置 - 包含音频
+                const displayMediaOptions = {
+                    video: {
+                        mediaSource: 'screen',
+                        width: { ideal: 1920 },
+                        height: { ideal: 1080 },
+                        frameRate: { ideal: 30 }
+                    },
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        sampleRate: 44100
+                    },
+                    // Chrome 特有的系统音频选项
+                    systemAudio: 'include',
+                    selfBrowserSurface: 'exclude',
+                    surfaceSwitching: 'include'
+                };
+
+                currentStream = await navigator.mediaDevices.getDisplayMedia(displayMediaOptions);
+                
+                // 检查获取的轨道
+                const videoTracks = currentStream.getVideoTracks();
+                const audioTracks = currentStream.getAudioTracks();
+
+                showStatus('success', `📺 视频轨道: ${videoTracks.length > 0 ? '✅ 已获取' : '❌ 未获取'}`);
+                showStatus(audioTracks.length > 0 ? 'success' : 'error', 
+                    `🔊 音频轨道: ${audioTracks.length > 0 ? '✅ 已获取 (包含系统音频!)' : '❌ 未获取'}`);
+
+                if (audioTracks.length > 0) {
+                    const audioTrack = audioTracks[0];
+                    const settings = audioTrack.getSettings();
+                    showStatus('success', '🎉 成功！现在可以分享系统音频了');
+                    showStatus('success', `🎵 音频设置: ${settings.sampleRate}Hz, ${settings.channelCount}声道`);
+                    showStatus('success', '✨ 在实际应用中，学生们现在可以听到视频声音了！');
+                } else {
+                    showStatus('error', '❌ 未获取到系统音频');
+                    showStatus('warning', '可能原因：');
+                    showStatus('warning', '• 未勾选"分享系统音频"选项');
+                    showStatus('warning', '• 浏览器不支持系统音频捕获');
+                    showStatus('warning', '• 选择的内容源不包含音频');
+                }
+
+                // 显示视频预览
+                if (videoTracks.length > 0) {
+                    const video = document.createElement('video');
+                    video.srcObject = currentStream;
+                    video.autoplay = true;
+                    video.muted = true; // 本地预览静音，避免回音
+                    video.style.width = '100%';
+                    video.style.height = '100%';
+                    video.style.objectFit = 'contain';
+                    
+                    videoContainer.innerHTML = '';
+                    videoContainer.appendChild(video);
+                }
+
+                // 监听流结束
+                currentStream.getTracks().forEach(track => {
+                    track.addEventListener('ended', () => {
+                        showStatus('warning', `🛑 ${track.kind}轨道已结束`);
+                        if (currentStream.getTracks().every(t => t.readyState === 'ended')) {
+                            stopTest();
+                        }
+                    });
+                });
+
+                stopBtn.disabled = false;
+                showStatus('success', '✅ 测试启动成功！');
+
+            } catch (error) {
+                showStatus('error', `❌ 测试失败: ${error.message}`);
+                
+                if (error.message.includes('Permission denied')) {
+                    showStatus('warning', '💡 解决方案：');
+                    showStatus('warning', '1. 点击"允许"按钮');
+                    showStatus('warning', '2. 选择要分享的屏幕/窗口/标签页');
+                    showStatus('warning', '3. 🔊 重要：勾选"分享系统音频"选项');
+                } else if (error.message.includes('NotSupported')) {
+                    showStatus('error', '❌ 浏览器不支持，请使用Chrome浏览器');
+                }
+                
+                startBtn.disabled = false;
+            }
+        }
+
+        function stopTest() {
+            const startBtn = document.getElementById('startBtn');
+            const stopBtn = document.getElementById('stopBtn');
+            const videoContainer = document.getElementById('videoContainer');
+
+            if (currentStream) {
+                currentStream.getTracks().forEach(track => {
+                    track.stop();
+                    showStatus('warning', `🛑 停止${track.kind}轨道`);
+                });
+                currentStream = null;
+            }
+
+            videoContainer.innerHTML = '📺 屏幕分享预览区域';
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+            showStatus('success', '✅ 测试已停止');
+        }
+
+        // 页面加载时检查浏览器支持
+        window.addEventListener('load', () => {
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+                showStatus('error', '❌ 浏览器不支持屏幕分享API');
+                document.getElementById('startBtn').disabled = true;
+                return;
+            }
+
+            const isChrome = /Chrome/.test(navigator.userAgent) && /Google Inc/.test(navigator.vendor);
+            if (isChrome) {
+                showStatus('success', '✅ Chrome浏览器 - 支持系统音频捕获');
+            } else {
+                showStatus('warning', '⚠️ 建议使用Chrome浏览器以获得最佳音频支持');
+            }
+
+            if (window.isSecureContext) {
+                showStatus('success', '✅ 安全上下文 - 可以使用屏幕分享');
+            } else {
+                showStatus('error', '❌ 需要HTTPS或localhost环境');
+            }
+        });
+    </script>
+</body>
+</html> 

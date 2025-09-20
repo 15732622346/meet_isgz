@@ -1,0 +1,205 @@
+* {
+  box-sizing: border-box;
+}
+
+
+
+html {
+  color-scheme: dark;
+  background-color: #111;
+}
+
+html,
+body {
+  overflow: hidden;
+  width: 100%;
+  height: 100%;
+  margin: 0px;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+}
+
+.header {
+  max-width: 500px;
+  padding-inline: 2rem;
+}
+
+.header > img {
+  display: block;
+  margin: auto;
+  max-width: 100%;
+}
+
+.header > h2 {
+  font-family: 'TWK Everett', sans-serif;
+  font-style: normal;
+  font-weight: 400;
+  font-size: 1.25rem;
+  line-height: 144%;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+footer {
+  width: 100%;
+  padding: 1.5rem 2rem;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.6);
+  background-color: var(--lk-bg);
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+footer a,
+h2 a {
+  color: #ff6352;
+  text-decoration-color: #a33529;
+  text-underline-offset: 0.125em;
+}
+
+footer a:hover,
+h2 a {
+  text-decoration-color: #ff6352;
+}
+
+h2 a {
+  text-decoration: none;
+}
+
+/* 隐藏未读消息计数器 */
+.chat-header > div:last-child:not(.chat-menu-container) {
+  display: none !important;
+}
+
+/* 使用更简单的方法隐藏chat-header中的文本节点"0" */
+.chat-header {
+  color: #333; /* 与背景色相同，使文本不可见 */
+}
+
+/* 恢复按钮的颜色 */
+.chat-header button {
+  color: #4a9eff !important;
+}
+
+/* 恢复管理员菜单中的文本颜色 */
+.chat-menu-container, .chat-menu-container * {
+  color: initial;
+}
+
+/* 屏幕共享视频优化 - 解决YouTube视频在全屏模式下底部被截断问题 */
+
+/* 1. 确保容器正确处理内容 */
+.screen-share-wrapper {
+  /* 确保容器能够适当约束内容 */
+  overflow: hidden !important; /* 防止内容溢出 */
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* 2. 全屏模式下的容器处理 */
+.screen-share-wrapper.fullscreen-mode,
+.screen-share-wrapper.fullscreen {
+  width: 100vw !important;
+  height: 100vh !important;
+  background-color: #000;
+}
+
+/* 3. 视频元素关键设置 - 确保不超出父div */
+.screen-share-wrapper video,
+.screen-share-wrapper .lk-video-track video,
+.screen-share-wrapper .lk-video-element {
+  width: 100% !important; 
+  height: 100% !important;
+  max-width: 100% !important; 
+  max-height: 100% !important;
+  /* 使用contain确保视频内容完整显示而不被裁剪 */
+  object-fit: contain !important;
+  background-color: #000;
+}
+
+/* 确保视频内容容器不会截断视频 */
+.lk-participant-tile,
+.lk-video-track {
+  overflow: hidden !important; /* 修改为hidden确保内容不溢出 */
+}
+
+/* 全屏模式下的所有视频元素 */
+:fullscreen video,
+:-webkit-full-screen video,
+:-moz-full-screen video {
+  object-fit: contain !important;
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
+}
+
+/* 视频区域容器样式优化 */
+.main-video-display {
+  position: relative !important;
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
+  overflow: hidden !important; /* 确保内容不溢出 */
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+}
+
+/* 视频内容区域约束 */
+.video-content, 
+  .video-conference-active {
+    position: relative !important;
+    width: 100% !important;
+    height: 100% !important;
+    max-width: 100% !important;
+    max-height: 100% !important;
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+    overflow: hidden !important;
+    flex: 1 1 0% !important;
+  }
+
+/* 保持视频网格布局在容器内 */
+.lk-grid-layout {
+  position: relative !important;
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
+  overflow: hidden !important;
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+  flex: 1 1 0% !important;
+}
+
+/* 视频元素等比例缩放和居中 */
+.lk-participant-media-video {
+  position: relative !important;
+  width: auto !important; /* 让宽度自适应 */
+  height: auto !important; /* 让高度自适应 */
+  max-width: 100% !important; /* 限制最大宽度 */
+  max-height: 100% !important; /* 限制最大高度 */
+  object-fit: contain !important; /* 保持宽高比并完整显示 */
+  margin: auto !important; /* 使用margin: auto辅助居中 */
+}
+
+/* 确保屏幕共享视频居中显示 */
+video[data-lk-source="screen_share"] {
+  position: relative !important;
+  top: 0 !important;
+  left: 0 !important;
+  transform: none !important;
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
+  object-fit: contain !important;
+}

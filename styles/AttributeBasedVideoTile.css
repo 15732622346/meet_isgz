@@ -1,0 +1,363 @@
+/* AttributeBasedVideoTile 组件样式 */
+
+/* 🎯 基础样式 */
+.attribute-based-video-tile {
+  position: relative;
+  border-radius: 8px;
+  overflow: hidden;
+  transition: all 0.3s ease;
+  background: #1a1a1a;
+  display: flex;
+  flex-direction: column;
+}
+
+.attribute-based-video-tile:hover {
+  transform: scale(1.02);
+}
+
+/* 🎥 视频内容区域 */
+.video-tile-content {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 🏷️ 信息叠加层 */
+.video-tile-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* 角色标签 - 左上角 */
+.video-tile-role-label {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: bold;
+  text-transform: uppercase;
+  backdrop-filter: blur(4px);
+}
+
+/* 连接质量指示器 - 右上角 */
+.video-tile-connection-quality {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+}
+
+/* 参与者名称 - 左下角 */
+.video-tile-name {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  backdrop-filter: blur(4px);
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 麦位状态 - 右下角 */
+.video-tile-mic-status {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: bold;
+  backdrop-filter: blur(4px);
+}
+
+/* 静音指示器 - 中心 */
+.video-tile-muted-indicator {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 24px;
+  color: #ff4444;
+  text-shadow: 0 0 4px rgba(0, 0, 0, 0.8);
+}
+
+/* 🎯 状态指示器 */
+.video-tile-status-indicators {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  gap: 8px;
+  pointer-events: none;
+  z-index: 20;
+}
+
+.status-indicator {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  background: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(8px);
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+/* 主持人指示器 */
+.host-indicator {
+  background: rgba(255, 107, 53, 0.9);
+  color: white;
+  box-shadow: 0 0 10px rgba(255, 107, 53, 0.5);
+}
+
+/* 麦位指示器 */
+.mic-indicator {
+  background: rgba(76, 175, 80, 0.9);
+  color: white;
+  box-shadow: 0 0 10px rgba(76, 175, 80, 0.5);
+}
+
+/* 申请指示器 */
+.requesting-indicator {
+  background: rgba(255, 193, 7, 0.9);
+  color: white;
+  box-shadow: 0 0 10px rgba(255, 193, 7, 0.5);
+}
+
+/* 静音指示器 */
+.muted-indicator {
+  background: rgba(244, 67, 54, 0.9);
+  color: white;
+  box-shadow: 0 0 10px rgba(244, 67, 54, 0.5);
+}
+
+/* 🎨 角色样式 */
+.video-tile-host {
+  border: 2px solid #ff6b35;
+  box-shadow: 0 0 15px rgba(255, 107, 53, 0.3);
+}
+
+.video-tile-host .video-tile-role-label {
+  background: rgba(255, 107, 53, 0.9);
+  color: white;
+}
+
+.video-tile-member {
+  border: 1px solid #333;
+}
+
+.video-tile-member .video-tile-role-label {
+  background: rgba(0, 0, 0, 0.7);
+  color: #ccc;
+}
+
+/* 🎤 麦位状态样式 */
+.video-tile-on-mic {
+  border: 2px solid #4CAF50;
+  box-shadow: 0 0 15px rgba(76, 175, 80, 0.3);
+}
+
+.video-tile-on-mic .video-tile-mic-status {
+  background: rgba(76, 175, 80, 0.9);
+  color: white;
+}
+
+.video-tile-requesting {
+  border: 2px solid #FFC107;
+  box-shadow: 0 0 15px rgba(255, 193, 7, 0.3);
+  animation: requestingPulse 2s infinite;
+}
+
+@keyframes requestingPulse {
+  0%, 100% { 
+    border-color: #FFC107;
+    box-shadow: 0 0 15px rgba(255, 193, 7, 0.3);
+  }
+  50% { 
+    border-color: #FFD54F;
+    box-shadow: 0 0 25px rgba(255, 193, 7, 0.5);
+  }
+}
+
+.video-tile-requesting .video-tile-mic-status {
+  background: rgba(255, 193, 7, 0.9);
+  color: white;
+}
+
+.video-tile-muted {
+  opacity: 0.7;
+  filter: grayscale(0.3);
+}
+
+.video-tile-muted .video-tile-mic-status {
+  background: rgba(244, 67, 54, 0.9);
+  color: white;
+}
+
+/* 📏 尺寸样式 */
+.video-tile-small {
+  width: 160px;
+  height: 120px;
+  min-width: 160px;
+  min-height: 120px;
+}
+
+.video-tile-medium {
+  width: 240px;
+  height: 180px;
+  min-width: 240px;
+  min-height: 180px;
+}
+
+.video-tile-large {
+  width: 320px;
+  height: 240px;
+  min-width: 320px;
+  min-height: 240px;
+}
+
+/* 📱 响应式设计 */
+@media (max-width: 768px) {
+  .video-tile-large {
+    width: 280px;
+    height: 210px;
+  }
+  
+  .video-tile-medium {
+    width: 200px;
+    height: 150px;
+  }
+  
+  .video-tile-small {
+    width: 140px;
+    height: 105px;
+  }
+  
+  .video-tile-name,
+  .video-tile-mic-status {
+    font-size: 10px;
+    padding: 1px 4px;
+  }
+  
+  .video-tile-role-label {
+    font-size: 8px;
+    padding: 1px 4px;
+  }
+  
+  .status-indicator {
+    width: 24px;
+    height: 24px;
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .video-tile-large {
+    width: 240px;
+    height: 180px;
+  }
+  
+  .video-tile-medium {
+    width: 160px;
+    height: 120px;
+  }
+  
+  .video-tile-small {
+    width: 120px;
+    height: 90px;
+  }
+}
+
+/* 🖱️ 交互状态 */
+.attribute-based-video-tile[draggable="true"] {
+  cursor: grab;
+}
+
+.attribute-based-video-tile[draggable="true"]:active {
+  cursor: grabbing;
+}
+
+.attribute-based-video-tile[style*="cursor: pointer"]:hover {
+  cursor: pointer;
+  transform: scale(1.05);
+}
+
+/* 🔄 加载状态 */
+.video-tile-loading {
+  background: linear-gradient(90deg, #1a1a1a 25%, #2a2a2a 50%, #1a1a1a 75%);
+  background-size: 200% 100%;
+  animation: loading 2s infinite;
+}
+
+@keyframes loading {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* 🎯 特殊效果 */
+.video-tile-speaking {
+  animation: speakingGlow 1s infinite alternate;
+}
+
+@keyframes speakingGlow {
+  from { 
+    box-shadow: 0 0 10px rgba(76, 175, 80, 0.3);
+  }
+  to { 
+    box-shadow: 0 0 20px rgba(76, 175, 80, 0.6);
+  }
+}
+
+/* 🌟 焦点状态 */
+.video-tile-focused {
+  border: 3px solid #2196F3;
+  box-shadow: 0 0 20px rgba(33, 150, 243, 0.4);
+  z-index: 100;
+}
+
+/* 🎭 自定义主题支持 */
+.video-tile-theme-dark {
+  background: #121212;
+  border-color: #333;
+}
+
+.video-tile-theme-light {
+  background: #f5f5f5;
+  border-color: #ddd;
+}
+
+.video-tile-theme-light .video-tile-name,
+.video-tile-theme-light .video-tile-role-label,
+.video-tile-theme-light .video-tile-mic-status {
+  background: rgba(255, 255, 255, 0.9);
+  color: #333;
+} 

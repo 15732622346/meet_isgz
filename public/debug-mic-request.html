@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🔍 申请上麦调试工具</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input, select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-right: 10px;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        .debug-btn {
+            background: #2196F3;
+        }
+        .debug-btn:hover {
+            background: #1976D2;
+        }
+        .result {
+            background: #f9f9f9;
+            border: 1px solid #ddd;
+            padding: 15px;
+            border-radius: 4px;
+            margin-top: 15px;
+            white-space: pre-wrap;
+            font-family: monospace;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .success {
+            border-color: #4CAF50;
+            background: #f1f8e9;
+        }
+        .error {
+            border-color: #f44336;
+            background: #ffebee;
+        }
+        .info {
+            background: #e3f2fd;
+            border: 1px solid #2196F3;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 申请上麦调试工具</h1>
+        <p>用于测试申请上麦功能是否正常工作</p>
+        
+        <div class="form-group">
+            <label for="apiBase">API服务器地址:</label>
+            <input type="text" id="apiBase" value="http://127.0.0.1:8080" placeholder="例如: http://meet.pge006.com">
+        </div>
+        
+        <div class="form-group">
+            <label for="roomName">房间名称:</label>
+            <input type="text" id="roomName" value="r-7be0729c" placeholder="例如: r-7be0729c">
+        </div>
+        
+        <div class="form-group">
+            <label for="participantIdentity">参与者身份:</label>
+            <input type="text" id="participantIdentity" value="user_1" placeholder="例如: user_1 或 student">
+        </div>
+        
+        <button onclick="testMicRequest()">🎤 测试申请上麦API</button>
+        <button onclick="debugBackend()" class="debug-btn">🔧 后端调试</button>
+        <button onclick="clearResults()">🗑️ 清空结果</button>
+    </div>
+
+    <div class="container">
+        <h2>📋 测试结果</h2>
+        <div id="results"></div>
+    </div>
+
+    <div class="container">
+        <h2>📖 使用说明</h2>
+        <div class="info">
+            <h3>🎯 测试步骤：</h3>
+            <ol>
+                <li><strong>设置参数：</strong>填写正确的API地址、房间名称和参与者身份</li>
+                <li><strong>测试API：</strong>点击"测试申请上麦API"按钮</li>
+                <li><strong>后端调试：</strong>点击"后端调试"查看详细的后端处理过程</li>
+                <li><strong>检查结果：</strong>查看返回的JSON数据和错误信息</li>
+            </ol>
+            
+            <h3>🔍 常见问题：</h3>
+            <ul>
+                <li><strong>CORS错误：</strong>检查后端的cors-universal.php配置</li>
+                <li><strong>404错误：</strong>检查API路径是否正确</li>
+                <li><strong>参数错误：</strong>确保room_name和participant_identity正确</li>
+                <li><strong>LiveKit连接失败：</strong>检查LiveKit服务是否运行</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        function addResult(content, type = 'info') {
+            const results = document.getElementById('results');
+            const div = document.createElement('div');
+            div.className = `result ${type}`;
+            div.textContent = content;
+            results.appendChild(div);
+            results.scrollTop = results.scrollHeight;
+        }
+
+        function addResultHTML(content, type = 'info') {
+            const results = document.getElementById('results');
+            const div = document.createElement('div');
+            div.className = `result ${type}`;
+            div.innerHTML = content;
+            results.appendChild(div);
+            results.scrollTop = results.scrollHeight;
+        }
+
+        async function testMicRequest() {
+            const apiBase = document.getElementById('apiBase').value;
+            const roomName = document.getElementById('roomName').value;
+            const participantIdentity = document.getElementById('participantIdentity').value;
+
+            if (!apiBase || !roomName || !participantIdentity) {
+                addResult('❌ 请填写所有必需的参数', 'error');
+                return;
+            }
+
+            addResult(`🔍 开始测试申请上麦API...
+API地址: ${apiBase}/api/request-mic.php
+房间名称: ${roomName}
+参与者身份: ${participantIdentity}`, 'info');
+
+            try {
+                const requestData = {
+                    room_name: roomName,
+                    participant_identity: participantIdentity
+                };
+
+                addResult(`📤 发送请求数据: ${JSON.stringify(requestData, null, 2)}`, 'info');
+
+                const response = await fetch(`${apiBase}/api/request-mic.php`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(requestData)
+                });
+
+                addResult(`📊 响应状态: ${response.status} ${response.statusText}`, 
+                    response.ok ? 'success' : 'error');
+
+                const responseText = await response.text();
+                addResult(`📥 响应内容: ${responseText}`, response.ok ? 'success' : 'error');
+
+                if (response.ok) {
+                    try {
+                        const data = JSON.parse(responseText);
+                        if (data.success) {
+                            addResult('✅ 申请上麦API调用成功！', 'success');
+                        } else {
+                            addResult(`❌ API返回错误: ${data.error}`, 'error');
+                        }
+                    } catch (e) {
+                        addResult('⚠️ 响应不是有效的JSON格式', 'error');
+                    }
+                } else {
+                    addResult('❌ HTTP请求失败', 'error');
+                }
+
+            } catch (error) {
+                addResult(`❌ 网络错误: ${error.message}`, 'error');
+            }
+        }
+
+        function debugBackend() {
+            const apiBase = document.getElementById('apiBase').value;
+            const roomName = document.getElementById('roomName').value;
+            const participantIdentity = document.getElementById('participantIdentity').value;
+
+            if (!apiBase || !roomName || !participantIdentity) {
+                addResult('❌ 请填写所有必需的参数', 'error');
+                return;
+            }
+
+            const debugUrl = `${apiBase}/debug-mic-request.php?room=${encodeURIComponent(roomName)}&identity=${encodeURIComponent(participantIdentity)}`;
+            
+            addResult(`🔧 后端调试URL: ${debugUrl}`, 'info');
+            addResult('请在新窗口中打开上述URL查看详细的后端调试信息', 'info');
+            
+            // 打开新窗口
+            window.open(debugUrl, '_blank');
+        }
+
+        function clearResults() {
+            document.getElementById('results').innerHTML = '';
+        }
+
+        // 页面加载时显示欢迎信息
+        window.onload = function() {
+            addResult('🎉 申请上麦调试工具已加载\n请填写参数并开始测试', 'info');
+        };
+    </script>
+</body>
+</html> 
