@@ -1,5 +1,5 @@
 # 基于 Participant Attributes 的视频框控制系统
-
+   写代码的时候一定要用 utf8   客户端 显示代码,注释,中文也要用 utf8, 写入的文件也一定要是utf8
 ## 📋 概述
 
 这个系统通过 LiveKit 的 `participant.attributes` 功能来实现视频框的动态样式控制和状态管理。它利用 LiveKit 的原生机制，无需额外的状态管理，实现了：

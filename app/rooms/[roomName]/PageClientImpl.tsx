@@ -125,6 +125,7 @@ function PageClientImplInner(props: PageClientImplInnerProps) {
   const [userRole, setUserRole] = React.useState<number | undefined>(undefined);
   const [userName, setUserName] = React.useState<string | undefined>(undefined);
   const [userId, setUserId] = React.useState<number | undefined>(undefined);
+  const [jwtToken, setJwtToken] = React.useState<string | undefined>(undefined);
   const [cachedRoomId, setCachedRoomId] = React.useState<string | undefined>(undefined);
   const [roomData, setRoomData] = React.useState<RoomSnapshot | null>(null);
 
@@ -255,6 +256,7 @@ function PageClientImplInner(props: PageClientImplInnerProps) {
       setUserRole(payload.user_roles);
       setUserName(payload.nickname || payload.username);
       setUserId(payload.id);
+      setJwtToken(payload.jwt_token);
       setRoomDataWithValidation(payload.roomData, 'handleLoginSuccess');
 
       setShowUserAuth(false);
@@ -267,6 +269,7 @@ function PageClientImplInner(props: PageClientImplInnerProps) {
     setShowUserAuth(false);
     setAskInvite(true);
     setInviteCode('');
+    setJwtToken(undefined);
   }, []);
 
   const handleInviteSubmit = React.useCallback(async () => {
@@ -305,6 +308,8 @@ function PageClientImplInner(props: PageClientImplInnerProps) {
         roomRequest,
         { method: 'GET' },
       );
+
+      setJwtToken(authData.jwt_token || '');
 
       const roomResult = normalizeGatewayResponse<RoomDetailResponse>(roomResponse);
       if (!roomResult.success) {
@@ -369,6 +374,7 @@ function PageClientImplInner(props: PageClientImplInnerProps) {
     setInviteCode('');
     setAskInvite(false);
     setShowUserAuth(true);
+    setJwtToken(undefined);
   }, []);
 
   const SimpleJoinForm = () => {
@@ -401,6 +407,8 @@ function PageClientImplInner(props: PageClientImplInnerProps) {
           user_name: username,
           user_jwt_token: authData.jwt_token || '',
         };
+
+        setJwtToken(authData.jwt_token || '');
 
         const roomResponse = await callGatewayApi<RoomDetailResponse>(
           await API_CONFIG.getEndpoint('gateway_rooms_detail'),
@@ -503,6 +511,8 @@ function PageClientImplInner(props: PageClientImplInnerProps) {
           userRole={userRole}
           userName={userName}
           userId={userId}
+          jwtToken={jwtToken}
+          roomName={props.roomName}
           roomData={roomData}
         />
       ) : askInvite ? (
@@ -522,6 +532,8 @@ function PageClientImplInner(props: PageClientImplInnerProps) {
             userRole={userRole}
             userName={userName}
             userId={userId}
+            jwtToken={jwtToken}
+            roomName={props.roomName}
             roomData={roomData}
           />
         ) : (
@@ -586,6 +598,8 @@ interface VideoConferenceComponentProps {
   userRole?: number;
   userName?: string;
   userId?: number;
+  jwtToken?: string;
+  roomName?: string;
   roomData?: RoomSnapshot | null;
 }
 
@@ -709,6 +723,8 @@ function VideoConferenceComponent(props: VideoConferenceComponentProps) {
           userName={props.userName ?? props.connectionDetails.participantName}
           userId={props.userId}
           userToken={props.connectionDetails.participantToken}
+          jwtToken={props.jwtToken}
+          roomName={props.roomName ?? props.roomData?.roomName ?? props.connectionDetails.roomName}
           hostUserId={props.roomData?.hostUserId}
         />
         <DebugMode />

@@ -2,11 +2,11 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useLocalParticipant, useParticipants, useRoomInfo } from '@livekit/components-react';
-import { API_CONFIG } from '@/lib/config';
+import { callGatewayApi, normalizeGatewayResponse } from '@/lib/api-client';
 import { shouldShowInMicList, parseParticipantMetadata } from '@/lib/token-utils';
 
 // 🎯 纯 Participant 状态管理的 Hook
-const useParticipantState = (roomDetails?: { maxMicSlots: number } | null, roleOverride?: number) => {
+const useParticipantState = (roomDetails?: { maxMicSlots?: number } | null, roleOverride?: number) => {
   const { localParticipant } = useLocalParticipant();
   const participants = useParticipants();
   const roomInfo = useRoomInfo();
@@ -130,9 +130,7 @@ const useParticipantState = (roomDetails?: { maxMicSlots: number } | null, roleO
       ).length;
       
       // 是否有主持人在线
-      const hasHost = participants.some(p => 
-        parseInt(p.attributes?.role || '1') >= 2
-      );
+;
       
       // 🔧 修复：直接使用roomDetails中的maxMicSlots，确保与父组件保持一致
       // 不添加默认值，保持与右上角麦位显示一致
@@ -142,8 +140,7 @@ const useParticipantState = (roomDetails?: { maxMicSlots: number } | null, roleO
         micListCount,
         onMicCount,
         requestingCount,
-        hasHost,
-        maxSlots,
+                maxSlots,
         hasAvailableSlots: maxSlots !== undefined ? micListCount < maxSlots : true
       };
     }, [participants, roomDetails]);
@@ -186,6 +183,8 @@ interface ModernFooterProps {
     unreadMessages: number;
   };
   micGlobalMute: boolean;
+  jwtToken?: string;
+  userId?: number;
   onToggleScreenShare: () => void;
   onToggleChat: () => void;
   onToggleParticipants: () => void;
@@ -193,11 +192,12 @@ interface ModernFooterProps {
   onToggleSettings: () => void;
   onLeaveRoom: () => void;
   onMicStatusChange: (status: string) => void;
+  currentUserRole?: number;
   room?: any; // LiveKit Room 对象
   roomDetails?: {
-    maxMicSlots: number;
-    roomName: string;
-    roomState: number;
+    maxMicSlots?: number;
+    roomName?: string;
+    roomState?: number;
   } | null; // 🎯 新增：房间配置信息
 }
 
@@ -205,6 +205,8 @@ export function ModernFooter({
   isScreenSharing,
   widgetState,
   micGlobalMute,
+  jwtToken,
+  userId,
   onToggleScreenShare,
   onToggleChat,
   onToggleParticipants,
@@ -221,6 +223,13 @@ export function ModernFooter({
 
   // 🎯 使用纯 Participant 状态管理
   const participantState = useParticipantState(roomDetails, currentUserRole);
+  const [micRequestLoading, setMicRequestLoading] = useState(false);
+
+  const maxMicSlotsLabel = participantState.micStats.maxSlots !== undefined
+    ? participantState.micStats.maxSlots.toString()
+    : '--';
+
+  const isRequestingMic = participantState.micStatus === 'requesting';
 
   // 🎯 游客权限检查函数 - 基于 participant 角色
   const handleGuestRestriction = (actionName: string): boolean => {
@@ -250,64 +259,86 @@ export function ModernFooter({
 
   // 🎯 麦克风申请处理 - 使用 LiveKit 原生 API
   const handleMicRequest = async () => {
-    console.log('🎤 申请上麦 - 纯 Participant 状态管理');
-    
-    // 检查用户是否被禁用
-    if (participantState.isDisabledUser) {
-      alert('您已被禁用，无法申请上麦');
-      return;
-    }
-    
-    // 🎯 游客权限检查 - 放在最前面
-    if (handleGuestRestriction('上麦申请')) return;
-    
-    // 基础检查
-    if (!participantState.micStats.hasHost) {
-      alert('请等待主持人进入房间后再申请上麦');
-      return;
-    }
-    
-    // 🎯 麦位数量限制检查
-    if (!participantState.micStats.hasAvailableSlots) {
-      alert(`麦位已满！当前麦位列表已有 ${participantState.micStats.micListCount}/${participantState.micStats.maxSlots} 人，请等待有人退出后再申请。`);
-      return;
-    }
-    
-    // 🎯 检查用户当前状态
-    if (participantState.micStatus === 'requesting') {
-      alert('您已经在申请中，请等待主持人批准');
-      return;
-    }
-    
-    if (participantState.micStatus === 'on_mic') {
-      alert('您已经在麦位上了');
-      return;
-    }
-    
-    if (!localParticipant) {
-      console.error('❌ 申请上麦失败：localParticipant 不存在');
+    if (micRequestLoading) {
       return;
     }
 
+    const isCancelling = participantState.micStatus === 'requesting';
+
+    if (participantState.isDisabledUser && !isCancelling) {
+      alert('????????????');
+      return;
+    }
+
+    if (!isCancelling && handleGuestRestriction('????')) {
+      return;
+    }
+
+    if (!isCancelling && !participantState.micStats.hasAvailableSlots) {
+      alert(`????????????? ${participantState.micStats.micListCount}/${maxMicSlotsLabel} ??????????????`);
+      return;
+    }
+
+    const targetRoomName = roomInfo?.name || roomDetails?.roomName || roomName;
+    if (!targetRoomName) {
+      alert('?????????????????');
+      return;
+    }
+
+    if (!jwtToken) {
+      alert('?????????????????????');
+      return;
+    }
+
+    if (!userId) {
+      alert('???????????????');
+      return;
+    }
+
+    const action: 'raise_hand' | 'lower_hand' = isCancelling ? 'lower_hand' : 'raise_hand';
+
+    setMicRequestLoading(true);
     try {
-      console.log(`🎯 申请上麦检查通过 - 当前麦位: ${participantState.micStats.micListCount}/${participantState.micStats.maxSlots}`);
-      
-      // 🎯 使用 LiveKit 原生方法更新 attributes
-      await localParticipant.setAttributes({
-        mic_status: 'requesting',
-        display_status: 'visible',
-        request_time: Date.now().toString(),
-        last_action: 'request',
-        user_name: localParticipant.identity
-      });
-      
-      // 更新本地状态
-      onMicStatusChange('requesting');
-      console.log('✅ 申请上麦成功 - 已更新 participant attributes');
+      const response = await callGatewayApi<{ success?: boolean; message?: string; error?: string }>(
+        '/api/v1/participants/request-microphone',
+        {
+          room_id: targetRoomName,
+          user_uid: userId,
+          action,
+        },
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${jwtToken}`,
+          },
+        },
+      );
 
+      const normalized = normalizeGatewayResponse<{ success?: boolean; message?: string; error?: string }>(response);
+      const payload = normalized.payload ?? (response as { success?: boolean; message?: string; error?: string });
+      const success = normalized.success || payload?.success === true;
+
+      if (!success) {
+        const message = normalized.error || normalized.message || payload?.message || payload?.error || '??????????';
+        throw new Error(message);
+      }
+
+      if (action === 'raise_hand') {
+        onMicStatusChange('requesting');
+        alert('????????????????');
+      } else {
+        onMicStatusChange('off_mic');
+        alert('???????');
+      }
     } catch (error) {
-      console.error('❌ 申请上麦失败:', error);
-      alert('申请上麦失败，请刷新页面重新登录');
+      console.error('??/??????:', error);
+      if (error instanceof Error) {
+        alert(error.message || '??????????');
+      } else {
+        alert('??????????');
+      }
+    } finally {
+      setMicRequestLoading(false);
     }
   };
 
@@ -435,58 +466,66 @@ export function ModernFooter({
         {/* 申请上麦按钮 - 游客和普通用户可见 */}
         {(participantState.isGuest || participantState.isRegularUser) && (
           <button 
-            className={`control-btn request-mic ${participantState.micStatus === 'requesting' ? 'requesting' : ''} ${participantState.isGuest ? 'guest-restricted' : ''} ${!participantState.micStats.hasHost || !participantState.micStats.hasAvailableSlots || participantState.isDisabledUser ? 'disabled' : ''}`}
+            className={`control-btn request-mic ${isRequestingMic ? 'requesting' : ''} ${participantState.isGuest ? 'guest-restricted' : ''} ${
+              !isRequestingMic && (!participantState.micStats.hasAvailableSlots || participantState.isDisabledUser) ? 'disabled' : ''
+            } ${micRequestLoading ? 'loading' : ''}`}
             onClick={handleMicRequest}
-            disabled={(!participantState.micStats.hasHost || !participantState.micStats.hasAvailableSlots || participantState.isDisabledUser) && !participantState.isGuest} // 游客不禁用按钮，让其可以点击查看提示
-            title={
-              participantState.isDisabledUser
-                ? '您已被禁用，无法申请上麦'
-                : participantState.isGuest 
-                  ? '游客需要注册为会员' 
-                  : !participantState.micStats.hasHost 
-                    ? '等待主持人进入后可申请上麦'
-                    : !participantState.micStats.hasAvailableSlots
-                      ? `麦位已满 (${participantState.micStats.micListCount}/${participantState.micStats.maxSlots})`
-                      : `申请上麦 (${participantState.micStats.micListCount}/${participantState.micStats.maxSlots})`
+            disabled={
+              micRequestLoading ||
+              (!isRequestingMic && !participantState.isGuest && (!participantState.micStats.hasAvailableSlots || participantState.isDisabledUser))
             }
-            style={{position: 'relative'}} // 添加position:relative以便放置覆盖层
+            title={
+              participantState.isDisabledUser && !isRequestingMic
+                ? '????????????'
+                : participantState.isGuest
+                  ? '?????????'
+                  : isRequestingMic
+                    ? '??????'
+                    : !participantState.micStats.hasAvailableSlots
+                      ? `???? (${participantState.micStats.micListCount}/${maxMicSlotsLabel})`
+                      : micRequestLoading
+                        ? '??????????'
+                        : `???? (${participantState.micStats.micListCount}/${maxMicSlotsLabel})`
+            }
+            style={{ position: 'relative' }}
           >
-            <span className="btn-icon">{participantState.isDisabledUser ? '🚫' : '🙋‍♂️'}</span>
+            <span className="btn-icon">{participantState.isDisabledUser ? '??' : isRequestingMic ? '?' : '?????'}</span>
             <span className="btn-label">
               {participantState.isDisabledUser
-                ? '已禁用'
-                : !participantState.micStats.hasHost 
-                  ? '等待主持人' 
-                  : !participantState.micStats.hasAvailableSlots 
-                    ? `麦位已满 (${participantState.micStats.micListCount}/${participantState.micStats.maxSlots})`
-                    : participantState.micStatus === 'requesting'
-                      ? '申请中...'
-                      : `申请上麦 (${participantState.micStats.micListCount}/${participantState.micStats.maxSlots})`
-              }
+                ? '???'
+                : micRequestLoading
+                  ? '???...'
+                  : !isRequestingMic && !participantState.micStats.hasAvailableSlots
+                    ? `???? (${participantState.micStats.micListCount}/${maxMicSlotsLabel})`
+                    : isRequestingMic
+                      ? '????'
+                      : `???? (${participantState.micStats.micListCount}/${maxMicSlotsLabel})`}
             </span>
-            
-            {/* 添加覆盖层，当用户被禁用时显示 */}
-            {participantState.isDisabledUser && (
-              <div style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                right: 0,
-                bottom: 0,
-                zIndex: 10,
-                pointerEvents: 'all', // 确保点击事件被拦截
-                cursor: 'not-allowed',
-                backgroundColor: 'rgba(0, 0, 0, 0.5)', // 半透明黑色背景
-                borderRadius: '8px', // 与按钮圆角一致
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }} onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                alert('您已被禁用，无法申请上麦');
-              }}>
-                <span style={{ color: '#ff6b6b', fontWeight: 'bold', fontSize: '12px' }}>🚫 已禁用</span>
+
+            {participantState.isDisabledUser && !isRequestingMic && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  zIndex: 10,
+                  pointerEvents: 'all',
+                  cursor: 'not-allowed',
+                  backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                  borderRadius: '8px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  alert('????????????');
+                }}
+              >
+                <span style={{ color: '#ff6b6b', fontWeight: 'bold', fontSize: '12px' }}>?? ???</span>
               </div>
             )}
           </button>

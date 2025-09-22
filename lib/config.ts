@@ -87,24 +87,42 @@ export function getEnvironment() {
   };
 }
 
-// API_CONFIG 对象 - 提供API配置和端点获取功能
-export const API_CONFIG = {
-  getLiveKitUrl: async (): Promise<string> => {
-    return config.livekit.wsUrl;
-  },
-
-  getEndpoint: (endpoint: string): string => {
-    const endpoints: Record<string, string> = {
-      'gateway_auth_status': '/api/v1/auth/status',
-      'gateway_rooms_detail': '/api/v1/rooms/detail',
-      'gateway_auth_login': '/api/v1/auth/login',
-      'gateway_auth_register': '/api/v1/auth/register',
-    };
-    return endpoints[endpoint] || endpoint;
-  }
+// API_CONFIG ?? - ??API?????????
+const API_ENDPOINTS: Record<string, string> = {
+  ROOM_INFO: '/api/v1/rooms/detail',
+  UPDATE_PARTICIPANT: '/api/update-participant.php',
+  ADMIN_CONTROL_PARTICIPANTS: '/admin-control-participants.php',
+  CHECK_BLOCKED_WORDS: '/api/check-blocked-words.php',
+  CLEAR_SESSION: '/clear-session.php',
+  GATEWAY_AUTH_STATUS: '/api/v1/auth/status',
+  GATEWAY_ROOMS_DETAIL: '/api/v1/rooms/detail',
+  GATEWAY_AUTH_LOGIN: '/api/v1/auth/login',
+  GATEWAY_AUTH_REGISTER: '/api/v1/auth/register',
+  gateway_auth_status: '/api/v1/auth/status',
+  gateway_rooms_detail: '/api/v1/rooms/detail',
+  gateway_auth_login: '/api/v1/auth/login',
+  gateway_auth_register: '/api/v1/auth/register',
 };
 
-// 获取API URL
+export const API_CONFIG = {
+  BASE_URL: config.gateway.baseUrl,
+  ENDPOINTS: API_ENDPOINTS,
+  getLiveKitUrl: async (): Promise<string> => config.livekit.wsUrl,
+  getEndpoint: (endpoint: string): string => {
+    if (!endpoint) {
+      return endpoint;
+    }
+    if (API_ENDPOINTS[endpoint]) {
+      return API_ENDPOINTS[endpoint];
+    }
+    const upperKey = endpoint.toUpperCase();
+    if (API_ENDPOINTS[upperKey]) {
+      return API_ENDPOINTS[upperKey];
+    }
+    return endpoint;
+  },
+};
+
 export function getApiUrl(path: string): string {
   return `${config.gateway.baseUrl}${path}`;
 }
