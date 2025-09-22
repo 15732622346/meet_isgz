@@ -1,7 +1,9 @@
-'use client';
+﻿'use client';
 
-// Gateway API 配置
+// Gateway API 閰嶇疆
 const GATEWAY_BASE_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || '';
+const GATEWAY_API_KEY = process.env.NEXT_PUBLIC_GATEWAY_API_KEY || '';
+const GATEWAY_API_SECRET = process.env.NEXT_PUBLIC_GATEWAY_API_SECRET || '';
 
 interface ApiResponse<T = any> {
   success: boolean;
@@ -143,10 +145,10 @@ class ApiClient {
   }
 }
 
-// 导出单例实例
+// 瀵煎嚭鍗曚緥瀹炰緥
 export const apiClient = new ApiClient();
 
-// 导出类型
+// 瀵煎嚭绫诲瀷
 export type {
   ApiResponse,
   AuthStatusResponse,
@@ -155,7 +157,7 @@ export type {
   RegisterRequest,
 };
 
-// 导出类
+// 瀵煎嚭绫?
 export { ApiClient };
 
 
@@ -228,7 +230,7 @@ export function normalizeGatewayResponse<T>(raw: unknown): NormalizedGatewayResp
   return { payload, success, message, error, raw };
 }
 
-// 便捷的Gateway API调用函数
+// 渚挎嵎鐨凣ateway API璋冪敤鍑芥暟
 export async function callGatewayApi<T = any>(
   endpoint: string,
   dataOrOptions?: any,
@@ -238,13 +240,13 @@ export async function callGatewayApi<T = any>(
     let finalOptions: RequestInit = {};
     let queryParams = '';
 
-    // 处理参数：如果有3个参数，第二个是数据，第三个是options
-    // 如果只有2个参数，第二个是options
+    // 澶勭悊鍙傛暟锛氬鏋滄湁3涓弬鏁帮紝绗簩涓槸鏁版嵁锛岀涓変釜鏄痮ptions
+    // 濡傛灉鍙湁2涓弬鏁帮紝绗簩涓槸options
     if (options !== undefined) {
-      // 3个参数的情况
+      // 3涓弬鏁扮殑鎯呭喌
       finalOptions = options;
       if (dataOrOptions && finalOptions.method?.toUpperCase() === 'GET') {
-        // GET请求，将数据转换为查询参数
+        // GET璇锋眰锛屽皢鏁版嵁杞崲涓烘煡璇㈠弬鏁?
         const params = new URLSearchParams();
         Object.entries(dataOrOptions).forEach(([key, value]) => {
           if (value !== undefined && value !== null) {
@@ -253,22 +255,30 @@ export async function callGatewayApi<T = any>(
         });
         queryParams = params.toString() ? `&${params.toString()}` : '';
       } else if (dataOrOptions && finalOptions.method?.toUpperCase() !== 'GET') {
-        // 非GET请求，数据放在body中
+        // 闈濭ET璇锋眰锛屾暟鎹斁鍦╞ody涓?
         finalOptions.body = JSON.stringify(dataOrOptions);
       }
     } else {
-      // 2个参数的情况，第二个参数是options
+      // 2涓弬鏁扮殑鎯呭喌锛岀浜屼釜鍙傛暟鏄痮ptions
       finalOptions = dataOrOptions || {};
     }
 
     const url = `${GATEWAY_BASE_URL}/gateway?api=${endpoint}${queryParams}`;
 
+    const headers = new Headers(finalOptions.headers as HeadersInit | undefined);
+    headers.set('Content-Type', 'application/json');
+
+    if (GATEWAY_API_KEY && !headers.has('X-API-Key')) {
+      headers.set('X-API-Key', GATEWAY_API_KEY);
+    }
+
+    if (GATEWAY_API_SECRET && !headers.has('X-API-Secret')) {
+      headers.set('X-API-Secret', GATEWAY_API_SECRET);
+    }
+
     const response = await fetch(url, {
-      headers: {
-        'Content-Type': 'application/json',
-        ...finalOptions.headers,
-      },
       ...finalOptions,
+      headers,
     });
 
     if (!response.ok) {
@@ -285,3 +295,4 @@ export async function callGatewayApi<T = any>(
     };
   }
 }
+
