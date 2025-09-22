@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { API_CONFIG, getApiUrl } from '@/lib/config';
-import { callGatewayApi } from '@/lib/api-client';
+import { callGatewayApi, normalizeGatewayResponse } from '@/lib/api-client';
 import { useUser } from '@/contexts/UserContext';
 import type {
   AuthLoginRequest,
@@ -78,8 +78,7 @@ export function UserAuthForm({ onLoginSuccess, onGuestMode, roomName }: UserAuth
     setLoading(true);
     setLoadingMessage('正在验证账户...');
     try {
-      //  第一步：用户身份验证
-      setError(''); // 清除之前的错误
+      setError('');
 
       const loginRequest: AuthLoginRequest = {
         user_name: formData.username,
@@ -89,19 +88,24 @@ export function UserAuthForm({ onLoginSuccess, onGuestMode, roomName }: UserAuth
       const loginResponse = await callGatewayApi<AuthLoginResponse>(
         await API_CONFIG.getEndpoint('gateway_auth_login'),
         loginRequest,
-        { method: 'POST' }
+        { method: 'POST' },
       );
 
-      if (!loginResponse.data || !loginResponse.data.success) {
-        setError(loginResponse.data?.message || '用户名或密码错误');
+      const loginResult = normalizeGatewayResponse<AuthLoginResponse>(loginResponse);
+      if (!loginResult.success) {
+        setError(loginResult.message || '用户名或密码错误');
         return;
       }
 
+      const loginData = loginResult.payload ?? (loginResponse as AuthLoginResponse);
+      const jwtToken =
+        loginData?.tokens?.access_token ||
+        loginData?.jwt_token ||
+        (typeof (loginResponse as any)?.jwt_token === 'string'
+          ? ((loginResponse as any).jwt_token as string)
+          : '');
 
-      //  第二步：使用 JWT Token 验证邀请码
-      setLoadingMessage('正在验证邀请码...');
-
-      if (!loginResponse.data.jwt_token) {
+      if (!jwtToken) {
         setError('登录异常：未获取到认证信息');
         return;
       }
@@ -110,74 +114,74 @@ export function UserAuthForm({ onLoginSuccess, onGuestMode, roomName }: UserAuth
         room_id: roomName,
         invite_code: formData.inviteCode,
         user_name: formData.username,
-        user_jwt_token: loginResponse.data.jwt_token,
+        user_jwt_token: jwtToken,
       };
 
+      setLoadingMessage('正在验证邀请码...');
 
       const roomResponse = await callGatewayApi<RoomDetailResponse>(
         await API_CONFIG.getEndpoint('gateway_rooms_detail'),
         roomRequest,
-        { method: 'GET' }
+        { method: 'GET' },
       );
 
-
-      if (!roomResponse.data || !roomResponse.data.success) {
-        console.error(' Gateway API调用失败:', {
-          hasData: !!roomResponse.data,
-          success: roomResponse.data?.success,
-          error: roomResponse.data?.error,
-          message: roomResponse.data?.message
-        });
-        setError(roomResponse.data?.error || '邀请码无效或房间不存在');
+      const roomResult = normalizeGatewayResponse<RoomDetailResponse>(roomResponse);
+      if (!roomResult.success) {
+        console.error('Gateway API 调用失败', { raw: roomResponse, normalized: roomResult });
+        setError(roomResult.error || roomResult.message || '邀请码无效或房间不存在');
         return;
       }
 
+      const roomData = roomResult.payload ?? (roomResponse as RoomDetailResponse);
+      const connection: any = (roomData as any)?.connection ?? {};
+      const liveKitToken = connection?.livekit_token || (roomData as any)?.token || '';
 
-      //  两步验证都成功，组装用户数据并回调
-      // 从API返回的正确字段提取LiveKit Token
-      const liveKitToken = roomResponse.data.connection?.livekit_token || roomResponse.data.token || '';
+      const roomInfoSource: any = (roomData as any)?.room ?? null;
+      const resolvedRoomData: RoomData | null = roomInfoSource
+        ? {
+            roomId: roomInfoSource.room_id ?? (roomData as any)?.room_id ?? '',
+            maxMicSlots: roomInfoSource.max_mic_slots ?? (roomData as any)?.max_mic_slots ?? 10,
+            roomName: roomInfoSource.room_name ?? (roomData as any)?.room_name ?? '',
+            roomState: roomInfoSource.room_state ?? (roomData as any)?.room_state ?? 1,
+            audioState: roomInfoSource.audio_state ?? (roomData as any)?.audio_state ?? 1,
+            cameraState: roomInfoSource.camera_state ?? (roomData as any)?.camera_state ?? 1,
+            chatState: roomInfoSource.chat_state ?? (roomData as any)?.chat_state ?? 1,
+            hostUserId: roomInfoSource.host_user_id ?? (roomData as any)?.host_user_id ?? 0,
+            hostNickname: roomInfoSource.host_nickname ?? (roomData as any)?.host_nickname ?? '',
+            onlineCount: roomInfoSource.online_count ?? (roomData as any)?.online_count ?? 0,
+            availableSlots: roomInfoSource.available_slots ?? (roomData as any)?.available_slots ?? 10,
+          }
+        : null;
 
-      // 兼容原有接口，继续调用回调
-      const userData = {
-        id: loginResponse.data.uid || loginResponse.data.user_id || loginResponse.data.id || 0,
+      onLoginSuccess({
+        id: loginData?.uid ?? loginData?.user_id ?? loginData?.id ?? 0,
         username: formData.username,
-        nickname: loginResponse.data.user_nickname || formData.username,
+        nickname: loginData?.user_nickname || formData.username,
         token: liveKitToken,
-        user_roles: loginResponse.data.user_roles || 1,
-        ws_url: loginResponse.data.ws_url || roomResponse.data.ws_url || roomResponse.data.connection?.wss_url,
-        jwt_token: loginResponse.data.jwt_token,
-        roomData: roomResponse.data.room ? {
-          roomId: roomResponse.data.room.room_id || roomResponse.data.room_id || '',
-          maxMicSlots: roomResponse.data.room.max_mic_slots || 10,
-          roomName: roomResponse.data.room.room_name || '',
-          roomState: roomResponse.data.room.room_state || 1,
-          audioState: roomResponse.data.room.audio_state || 1,
-          cameraState: roomResponse.data.room.camera_state || 1,
-          chatState: roomResponse.data.room.chat_state || 1,
-          hostUserId: roomResponse.data.room.host_user_id || 0,
-          hostNickname: roomResponse.data.room.host_nickname || '',
-          onlineCount: roomResponse.data.room.online_count || 0,
-          availableSlots: roomResponse.data.room.available_slots || 10
-        } : null
-      };
-
-      onLoginSuccess(userData);
-
+        user_roles: loginData?.user_roles || 1,
+        ws_url:
+          loginData?.ws_url ||
+          (roomData as any)?.ws_url ||
+          connection?.wss_url ||
+          connection?.ws_url ||
+          '',
+        jwt_token: jwtToken,
+        roomData: resolvedRoomData,
+      });
     } catch (err) {
       console.error('登录错误:', err);
-      // 更友好的错误提示
       if (err instanceof Error) {
         if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
           setError('无法连接到服务器，请检查网络连接');
         } else if (err.message.includes('认证失败')) {
           setError('用户名或密码错误');
-        } else if (err.message.includes('访问被拒绝')) {
+        } else if (err.message.includes('权限')) {
           setError('邀请码无效或权限不足');
         } else {
           setError(err.message);
         }
       } else {
-        setError('登录失败，请稍后再试');
+        setError('登录失败，请稍后重试');
       }
     } finally {
       setLoading(false);
@@ -187,7 +191,7 @@ export function UserAuthForm({ onLoginSuccess, onGuestMode, roomName }: UserAuth
 
   const handleRegister = async () => {
     if (!formData.username || !formData.password || !formData.nickname) {
-      setError('请填写所有必填字段');
+      setError('请填写完整的注册信息');
       return;
     }
 
@@ -197,60 +201,57 @@ export function UserAuthForm({ onLoginSuccess, onGuestMode, roomName }: UserAuth
     }
 
     if (formData.password.length < 6) {
-      setError('密码长度至少6位');
+      setError('密码长度至少 6 位');
       return;
     }
 
     setLoading(true);
-    setLoadingMessage('正在注册账户...');
+    setLoadingMessage('正在注册账号...');
     try {
-      //  获取客户端IP（可选，与external-api-register.html保持一致）
-      let clientIP = null;
+      let clientIP: string | null = null;
       try {
         const ipResponse = await fetch('https://api.ipify.org?format=json');
         const ipData = await ipResponse.json();
-        clientIP = ipData.ip && ipData.ip.trim() !== '' ? ipData.ip.trim() : null;
+        clientIP = typeof ipData.ip === 'string' && ipData.ip.trim() !== '' ? ipData.ip.trim() : null;
       } catch (error) {
-        // IP获取失败不影响注册流程
+        // IP 获取失败不阻断注册流程
       }
 
-      //  使用Gateway API注册，与external-api-register.html保持一致
       const registerRequest = {
         user_name: formData.username,
         user_nickname: formData.nickname,
         user_password: formData.password,
-        user_ip: clientIP
+        user_ip: clientIP,
       };
 
-      const registerResponse = await callGatewayApi(
+      const registerResponse = await callGatewayApi<AuthLoginResponse>(
         await API_CONFIG.getEndpoint('gateway_auth_register'),
         registerRequest,
-        { method: 'POST' }
+        { method: 'POST' },
       );
 
-      if (!registerResponse.data || !registerResponse.data.success) {
-        setError(registerResponse.data?.error || registerResponse.data?.message || '注册失败');
+      const registerResult = normalizeGatewayResponse<AuthLoginResponse>(registerResponse);
+      if (!registerResult.success) {
+        setError(registerResult.error || registerResult.message || '注册失败');
         return;
       }
 
-      //  注册成功且自动登录，与external-api-register.html完全一致
-      const data = registerResponse.data;
+      const registerData = registerResult.payload ?? (registerResponse as AuthLoginResponse);
+      const nickname = registerData?.user_nickname || formData.nickname || formData.username;
 
-      // 注册成功后显示成功消息，切换到登录模式（与external-api-register.html一致）
-      setError(''); // 清除错误信息
-      setSuccessMessage(`注册成功！欢迎 ${data.user_nickname}，请使用邀请码登录进入房间。`);
+      setError('');
+      setSuccessMessage(`注册成功，欢迎 ${nickname}，请使用邀请码登录进入房间。`);
       setFormData({
-        username: formData.username, // 保留用户名，方便登录
-        password: formData.password, // 保留密码，方便登录
+        username: formData.username,
+        password: formData.password,
         nickname: '',
         confirmPassword: '',
-        inviteCode: ''
-      }); // 清空表单（保留用户名和密码）
-      setIsLogin(true); // 切换到登录模式
+        inviteCode: '',
+      });
+      setIsLogin(true);
 
     } catch (err) {
       console.error('注册错误:', err);
-      // 更友好的错误提示
       if (err instanceof Error) {
         if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
           setError('无法连接到服务器，请检查网络连接');
@@ -258,7 +259,7 @@ export function UserAuthForm({ onLoginSuccess, onGuestMode, roomName }: UserAuth
           setError(err.message);
         }
       } else {
-        setError('注册失败，请稍后再试');
+        setError('注册失败，请稍后重试');
       }
     } finally {
       setLoading(false);

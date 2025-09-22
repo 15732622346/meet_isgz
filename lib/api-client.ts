@@ -158,6 +158,76 @@ export type {
 // 导出类
 export { ApiClient };
 
+
+
+export interface NormalizedGatewayResponse<T> {
+  payload?: T;
+  success: boolean;
+  message?: string;
+  error?: string;
+  raw: unknown;
+}
+
+export function normalizeGatewayResponse<T>(raw: unknown): NormalizedGatewayResponse<T> {
+  if (!raw || typeof raw !== 'object') {
+    return { payload: undefined, success: false, message: undefined, error: undefined, raw };
+  }
+
+  const envelope = raw as Record<string, unknown> & {
+    data?: unknown;
+    success?: unknown;
+    message?: unknown;
+    error?: unknown;
+  };
+  const hasData = Object.prototype.hasOwnProperty.call(envelope, 'data') && envelope.data !== undefined;
+  const payload = (hasData ? (envelope.data as T | undefined) : (raw as T)) ?? undefined;
+
+  let success = false;
+  if (payload && typeof payload === 'object') {
+    const payloadRecord = payload as Record<string, unknown>;
+    if (typeof payloadRecord.success === 'boolean') {
+      success = payloadRecord.success;
+    }
+  }
+  if (!success && typeof envelope.success === 'boolean') {
+    success = envelope.success;
+  }
+
+  const message = (() => {
+    if (payload && typeof payload === 'object') {
+      const payloadRecord = payload as Record<string, unknown>;
+      if (typeof payloadRecord.message === 'string') {
+        return payloadRecord.message;
+      }
+      if (typeof payloadRecord.error === 'string') {
+        return payloadRecord.error;
+      }
+    }
+    if (typeof envelope.message === 'string') {
+      return envelope.message;
+    }
+    if (typeof envelope.error === 'string') {
+      return envelope.error;
+    }
+    return undefined;
+  })();
+
+  const error = (() => {
+    if (payload && typeof payload === 'object') {
+      const payloadRecord = payload as Record<string, unknown>;
+      if (typeof payloadRecord.error === 'string') {
+        return payloadRecord.error;
+      }
+    }
+    if (typeof envelope.error === 'string') {
+      return envelope.error;
+    }
+    return undefined;
+  })();
+
+  return { payload, success, message, error, raw };
+}
+
 // 便捷的Gateway API调用函数
 export async function callGatewayApi<T = any>(
   endpoint: string,
