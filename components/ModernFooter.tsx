@@ -21,17 +21,41 @@ const useParticipantState = (roomDetails?: { maxMicSlots: number } | null, roleO
         return value;
       }
 
-      if (typeof value === 'string' && value.trim() !== '') {
-        const parsed = Number(value);
-        if (Number.isFinite(parsed)) {
-          return parsed;
+      if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (!trimmed) {
+          return undefined;
+        }
+
+        const numeric = Number(trimmed);
+        if (Number.isFinite(numeric)) {
+          return numeric;
+        }
+
+        switch (trimmed.toLowerCase()) {
+          case 'admin':
+          case 'administrator':
+            return 3;
+          case 'host':
+          case 'moderator':
+            return 2;
+          case 'student':
+          case 'member':
+          case 'user':
+            return 1;
+          case 'guest':
+            return 0;
+          default:
+            return undefined;
         }
       }
 
       return undefined;
     };
 
-    const metadataRole = normalizeRole(metadataPayload?.role);
+    const metadataRole =
+      normalizeRole(metadataPayload?.role) ??
+      normalizeRole(metadataPayload?.role_name);
     const overrideRole = normalizeRole(roleOverride);
     const attributeRole = normalizeRole(attributes.role);
     const role = overrideRole ?? metadataRole ?? attributeRole ?? 1;

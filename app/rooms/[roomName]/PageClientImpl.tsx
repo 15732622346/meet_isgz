@@ -709,6 +709,7 @@ function VideoConferenceComponent(props: VideoConferenceComponentProps) {
           userName={props.userName ?? props.connectionDetails.participantName}
           userId={props.userId}
           userToken={props.connectionDetails.participantToken}
+          hostUserId={props.roomData?.hostUserId}
         />
         <DebugMode />
         <RecordingIndicator />

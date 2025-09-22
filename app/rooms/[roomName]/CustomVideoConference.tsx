@@ -49,6 +49,7 @@ interface CustomVideoConferenceProps {
   userName?: string;
   userId?: number;
   userToken?: string; // 🎯 添加Token用于API认证
+  hostUserId?: number;
 }
 
 interface CustomWidgetState {
@@ -69,6 +70,7 @@ export function CustomVideoConference({
   userName,
   userId,
   userToken,
+  hostUserId,
 }: CustomVideoConferenceProps) {
   // 🎯 版本标识 - LiveKit原生机制重构版本
   console.log('🚀🚀🚀 CustomVideoConference 版本: v2024.06.29.21.30 - LiveKit原生机制重构版本 🚀🚀🚀');
@@ -262,24 +264,59 @@ export function CustomVideoConference({
           return value;
         }
 
-        if (typeof value === 'string' && value.trim() !== '') {
-          const parsed = Number(value);
-          if (Number.isFinite(parsed)) {
-            return parsed;
+        if (typeof value === 'string') {
+          const trimmed = value.trim();
+          if (!trimmed) {
+            return undefined;
+          }
+
+          const numeric = Number(trimmed);
+          if (Number.isFinite(numeric)) {
+            return numeric;
+          }
+
+          switch (trimmed.toLowerCase()) {
+            case 'admin':
+            case 'administrator':
+              return 3;
+            case 'host':
+            case 'moderator':
+              return 2;
+            case 'student':
+            case 'member':
+            case 'user':
+              return 1;
+            case 'guest':
+              return 0;
+            default:
+              return undefined;
           }
         }
 
         return undefined;
       };
 
-      const metadataRole = normalizeRole(metadata?.role);
+      const metadataRole =
+        normalizeRole(metadata?.role) ?? normalizeRole(metadata?.role_name);
       const attributeRole = normalizeRole(attributes.role);
       const localOverride =
         participant.isLocal && typeof userRole === 'number' ? userRole : undefined;
+      const hostIdentity =
+        typeof hostUserId === 'number' ? `user_${hostUserId}` : undefined;
+      const identityMatchesHost =
+        hostIdentity !== undefined && participant.identity === hostIdentity;
 
-      return localOverride ?? metadataRole ?? attributeRole ?? 1;
+      if (localOverride !== undefined) {
+        return localOverride;
+      }
+
+      if (identityMatchesHost) {
+        return metadataRole ?? attributeRole ?? 2;
+      }
+
+      return metadataRole ?? attributeRole ?? 1;
     },
-    [userRole],
+    [userRole, hostUserId],
   );
 
   // 🎯 计算所有参与者的角色 - 只在必要时更新
