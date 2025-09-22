@@ -22,6 +22,31 @@ export interface ParticipantMicStatus {
   isDisabledUser?: boolean;
 }
 
+
+export interface ParticipantMetadataPayload {
+  role?: number | string;
+  role_name?: string;
+  mic_status?: string;
+  display_status?: string;
+  last_action?: string;
+  isDisabledUser?: boolean | string;
+  is_disabled_user?: boolean | string;
+  [key: string]: unknown;
+}
+
+export function parseParticipantMetadata(metadata?: string | null): ParticipantMetadataPayload | null {
+  if (!metadata) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(metadata) as ParticipantMetadataPayload;
+  } catch (error) {
+    console.error('Failed to parse participant metadata:', error);
+    return null;
+  }
+}
+
 /**
  * 解析LiveKit Token中的metadata
  */

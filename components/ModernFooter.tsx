@@ -3,23 +3,55 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useLocalParticipant, useParticipants, useRoomInfo } from '@livekit/components-react';
 import { API_CONFIG } from '@/lib/config';
-import { shouldShowInMicList } from '@/lib/token-utils';
+import { shouldShowInMicList, parseParticipantMetadata } from '@/lib/token-utils';
 
 // 🎯 纯 Participant 状态管理的 Hook
-const useParticipantState = (roomDetails?: { maxMicSlots: number } | null) => {
+const useParticipantState = (roomDetails?: { maxMicSlots: number } | null, roleOverride?: number) => {
   const { localParticipant } = useLocalParticipant();
   const participants = useParticipants();
   const roomInfo = useRoomInfo();
   
   return React.useMemo(() => {
+
     const attributes = localParticipant?.attributes || {};
-    
-    // 🎯 所有状态都从 participant.attributes 获取
-    const role = parseInt(attributes.role || '1');
-    const micStatus = attributes.mic_status || 'off_mic';
-    const displayStatus = attributes.display_status || 'hidden';
-    const lastAction = attributes.last_action;
-    const isDisabledUser = attributes.isDisabledUser === 'true';
+    const metadataPayload = parseParticipantMetadata(localParticipant?.metadata);
+
+    const normalizeRole = (value: unknown): number | undefined => {
+      if (typeof value === 'number' && Number.isFinite(value)) {
+        return value;
+      }
+
+      if (typeof value === 'string' && value.trim() !== '') {
+        const parsed = Number(value);
+        if (Number.isFinite(parsed)) {
+          return parsed;
+        }
+      }
+
+      return undefined;
+    };
+
+    const metadataRole = normalizeRole(metadataPayload?.role);
+    const overrideRole = normalizeRole(roleOverride);
+    const attributeRole = normalizeRole(attributes.role);
+    const role = overrideRole ?? metadataRole ?? attributeRole ?? 1;
+
+    const metadataMicStatus =
+      typeof metadataPayload?.mic_status === 'string' ? metadataPayload.mic_status : undefined;
+    const metadataDisplayStatus =
+      typeof metadataPayload?.display_status === 'string' ? metadataPayload.display_status : undefined;
+    const metadataLastAction =
+      typeof metadataPayload?.last_action === 'string' ? metadataPayload.last_action : undefined;
+    const metadataDisabledValue =
+      metadataPayload?.isDisabledUser ?? metadataPayload?.is_disabled_user;
+
+    const micStatus = metadataMicStatus ?? attributes.mic_status ?? 'off_mic';
+    const displayStatus = metadataDisplayStatus ?? attributes.display_status ?? 'hidden';
+    const lastAction = metadataLastAction ?? attributes.last_action;
+    const isDisabledUser =
+      metadataDisabledValue === true ||
+      metadataDisabledValue === 'true' ||
+      attributes.isDisabledUser === 'true';
     
     // 🎯 基于角色的权限计算
     const isGuest = role === 0;
@@ -117,7 +149,7 @@ const useParticipantState = (roomDetails?: { maxMicSlots: number } | null) => {
       attributes,
       permissions: localParticipant?.permissions
     };
-  }, [localParticipant?.attributes, localParticipant?.permissions, participants, roomDetails]);
+  }, [localParticipant?.attributes, localParticipant?.metadata, localParticipant?.permissions, participants, roomDetails, roleOverride]);
 };
 
 // 🎯 简化的接口，移除不必要的 props
@@ -158,12 +190,13 @@ export function ModernFooter({
   onMicStatusChange,
   room,
   roomDetails,
+  currentUserRole,
 }: ModernFooterProps) {
   const { localParticipant } = useLocalParticipant();
   const roomInfo = useRoomInfo();
 
   // 🎯 使用纯 Participant 状态管理
-  const participantState = useParticipantState(roomDetails);
+  const participantState = useParticipantState(roomDetails, currentUserRole);
 
   // 🎯 游客权限检查函数 - 基于 participant 角色
   const handleGuestRestriction = (actionName: string): boolean => {

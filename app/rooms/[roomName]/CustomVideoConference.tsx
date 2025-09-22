@@ -40,7 +40,7 @@ import { AudioShareHelper } from '../../../components/AudioShareHelper';
 import { AttributeBasedVideoTile } from '../../../components/AttributeBasedVideoTile';
 import { HideLiveKitCounters } from '../../../components/HideLiveKitCounters';
 import { API_CONFIG } from '@/lib/config';
-import { shouldShowInMicList, isRequestingMic, isOnMic, isMuted, canSpeak, isHostOrAdmin, getMicStatusText, getRoleText, parseParticipantAttributes, isCameraEnabled } from '../../../lib/token-utils';
+import { shouldShowInMicList, isRequestingMic, isOnMic, isMuted, canSpeak, isHostOrAdmin, getMicStatusText, getRoleText, parseParticipantAttributes, parseParticipantMetadata, isCameraEnabled } from '../../../lib/token-utils';
 
 interface CustomVideoConferenceProps {
   chatMessageFormatter?: MessageFormatter;
@@ -252,15 +252,35 @@ export function CustomVideoConference({
   // 🎯 获取参与者角色的辅助函数 - 添加缓存
   const roleCache = React.useRef<Record<string, number>>({});
   
-  const getParticipantRole = React.useCallback((participant: Participant) => {
-    // 🎯 正确方式：直接从participant.attributes获取角色
-    const attributes = participant.attributes || {};
-    const role = parseInt(attributes.role || '1');
-    
-    // 用户调试信息已清理
-    
-    return role;
-  }, []);
+  const getParticipantRole = React.useCallback(
+    (participant: Participant) => {
+      const metadata = parseParticipantMetadata(participant.metadata);
+      const attributes = participant.attributes || {};
+
+      const normalizeRole = (value: unknown): number | undefined => {
+        if (typeof value === 'number' && Number.isFinite(value)) {
+          return value;
+        }
+
+        if (typeof value === 'string' && value.trim() !== '') {
+          const parsed = Number(value);
+          if (Number.isFinite(parsed)) {
+            return parsed;
+          }
+        }
+
+        return undefined;
+      };
+
+      const metadataRole = normalizeRole(metadata?.role);
+      const attributeRole = normalizeRole(attributes.role);
+      const localOverride =
+        participant.isLocal && typeof userRole === 'number' ? userRole : undefined;
+
+      return localOverride ?? metadataRole ?? attributeRole ?? 1;
+    },
+    [userRole],
+  );
 
   // 🎯 计算所有参与者的角色 - 只在必要时更新
   const participantRolesInfo = React.useMemo(() => {
@@ -1834,6 +1854,7 @@ export function CustomVideoConference({
                     onMicStatusChange={handleMicStatusChange}
                     room={roomCtx}
                     roomDetails={roomDetails}
+                    currentUserRole={userRole}
                   />
                 </div>
               </div>
