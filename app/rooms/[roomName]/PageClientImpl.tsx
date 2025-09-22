@@ -595,34 +595,6 @@ function VideoConferenceComponent(props: VideoConferenceComponentProps) {
   const e2eeEnabled = e2eeSetup.isE2EEEnabled;
   const e2eeSetupComplete = e2eeSetup.isSetupComplete;
 
-  const roomInfo = React.useMemo(() => {
-    if (props.roomData) {
-      return {
-        roomName: props.roomData.roomName,
-        hostNickname: props.roomData.hostNickname,
-        onlineCount: props.roomData.onlineCount,
-        maxMicSlots: props.roomData.maxMicSlots,
-        availableSlots: props.roomData.availableSlots,
-      };
-    }
-
-    return {
-      roomName: props.connectionDetails.roomName,
-      hostNickname: undefined,
-      onlineCount: undefined,
-      maxMicSlots: undefined,
-      availableSlots: undefined,
-    };
-  }, [props.connectionDetails.roomName, props.roomData]);
-
-  const currentUserSummary = React.useMemo(
-    () => ({
-      name: props.userName ?? props.connectionDetails.participantName,
-      role: props.userRole,
-    }),
-    [props.connectionDetails.participantName, props.userName, props.userRole],
-  );
-
   const roomOptions = React.useMemo((): RoomOptions => {
     let videoCodec: VideoCodec | undefined = props.options.codec || 'vp9';
     if (e2eeEnabled && (videoCodec === 'av1' || videoCodec === 'vp9')) {
@@ -733,12 +705,10 @@ function VideoConferenceComponent(props: VideoConferenceComponentProps) {
       <RoomContext.Provider value={room}>
         <KeyboardShortcuts />
         <CustomVideoConference
-          room={room}
-          serverUrl={props.connectionDetails.serverUrl}
-          token={props.connectionDetails.participantToken}
-          connect
-          roomInfo={roomInfo}
-          currentUser={currentUserSummary}
+          userRole={props.userRole}
+          userName={props.userName ?? props.connectionDetails.participantName}
+          userId={props.userId}
+          userToken={props.connectionDetails.participantToken}
         />
         <DebugMode />
         <RecordingIndicator />
