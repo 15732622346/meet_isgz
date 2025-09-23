@@ -39,7 +39,22 @@ import { AttributeBasedVideoTile } from '../../../components/AttributeBasedVideo
 import { HideLiveKitCounters } from '../../../components/HideLiveKitCounters';
 import { API_CONFIG } from '@/lib/config';
 import { callGatewayApi } from '@/lib/api-client';
-import { shouldShowInMicList, isRequestingMic, isOnMic, isMuted, canSpeak, isHostOrAdmin, getMicStatusText, getRoleText, parseParticipantAttributes, parseParticipantMetadata, isCameraEnabled } from '../../../lib/token-utils';
+import { useUserContext } from '@/contexts/UserContext';
+import {
+  shouldShowInMicList,
+  isRequestingMic,
+  isOnMic,
+  isMuted,
+  canSpeak,
+  isHostOrAdmin,
+  getMicStatusText,
+  getRoleText,
+  parseParticipantMetadata,
+  isCameraEnabled,
+  isUserDisabled,
+  canCurrentUserControlParticipant,
+  updateParticipantMetadata
+} from '../../../lib/token-utils';
 interface CustomVideoConferenceProps {
   chatMessageFormatter?: MessageFormatter;
   SettingsComponent?: React.ComponentType<{ onClose?: () => void }>;
@@ -119,6 +134,10 @@ export function CustomVideoConference({
       window.location.reload();
     }
   }, []);
+
+  // UserContext集成
+  const { userInfo, resolveGatewayToken, getCurrentUserRole } = useUserContext();
+
   const participants = useParticipants();
   const { localParticipant } = useLocalParticipant();
   const roomInfo = useRoomInfo();
@@ -1072,61 +1091,65 @@ export function CustomVideoConference({
             📹 摄像头
           </button>
           {/* 申请上麦按钮 - 普通用户 */}
-        {userId && userRole && userRole < 2 && roomInfo.name && (
-          <button 
-            className={`control-btn request-mic-btn ${isUserDisabled || localParticipant?.attributes?.isDisabledUser === 'true' ? 'disabled' : ''}`}
-            disabled={isUserDisabled || localParticipant?.attributes?.isDisabledUser === 'true'}
+        {userInfo && getCurrentUserRole() < 2 && roomInfo.name && (
+          <button
+            className={`control-btn request-mic-btn ${isUserDisabled(localParticipant?.metadata) ? 'disabled' : ''}`}
+            disabled={isUserDisabled(localParticipant?.metadata)}
             onClick={async (e) => {
               // 检查用户是否被禁用
-              if (isUserDisabled || localParticipant?.attributes?.isDisabledUser === 'true') {
+              if (isUserDisabled(localParticipant?.metadata)) {
                 e.preventDefault();
                 e.stopPropagation();
                 alert('您已被禁用，无法申请上麦');
                 return false;
               }
-              // 取消“等待主持人”限制
+
               try {
-                // 🎯 使用LiveKit原生机制 - 直接设置participant attributes
-                console.log(`🎯 申请上麦 - 使用LiveKit原生机制: ${localParticipant?.name}`);
+                console.log(`🎯 申请上麦 - 调用后端API: ${localParticipant?.name}`);
                 if (!localParticipant) {
                   console.error('❌ localParticipant 不存在');
                   alert('❌ 申请失败：用户信息不存在');
                   return;
                 }
-                // 🔍 输出调试信息到控制台
-                const timestamp = new Date().toLocaleTimeString();
-                console.log(`🎯 ${timestamp} 申请上麦 - LiveKit原生机制`);
-                console.log(`  参与者: ${localParticipant.name} (${localParticipant.identity})`);
-                console.log(`  当前attributes:`, localParticipant.attributes);
-                // 🎯 直接使用LiveKit原生API设置participant attributes
-                await localParticipant.setAttributes({
-                  ...localParticipant.attributes, // 保留现有属性
-                  mic_status: 'requesting',        // 设置为申请状态
-                  display_status: 'visible',       // 确保可见
-                  request_time: Date.now().toString() // 添加申请时间戳
+
+                // 获取Gateway token
+                const token = await resolveGatewayToken();
+
+                // 调用后端API申请上麦
+                const response = await callGatewayApi('/api/v1/participants/request-microphone', {
+                  room_id: roomInfo.name,
+                  participant_identity: localParticipant.identity,
+                  user_id: userInfo.uid,
+                  request_time: new Date().toISOString(),
+                }, {
+                  method: 'POST',
+                  headers: {
+                    'Authorization': `Bearer ${token}`,
+                  }
                 });
-                console.log('✅ 申请上麦成功 - attributes已更新');
-                console.log(`  新attributes:`, localParticipant.attributes);
-                // 🎯 LiveKit会自动同步attributes到所有客户端
-                // 主持人会通过attributesChanged事件收到通知
-                alert('✅ 申请成功！等待主持人批准');
+
+                if (response.success) {
+                  console.log('✅ 申请上麦成功 - 后端已处理');
+                  alert('✅ 申请成功！等待主持人批准');
+                } else {
+                  throw new Error(response.message || '申请失败');
+                }
               } catch (error) {
                 console.error('❌ 申请上麦失败:', error);
                 alert('❌ 申请失败: ' + (error as Error).message);
               }
             }}
             style={{
-              // 🔧 取消“等待主持人”限制，只在被禁用时禁用
-              pointerEvents: isUserDisabled || localParticipant?.attributes?.isDisabledUser === 'true' ? 'none' : 'auto',
-              opacity: isUserDisabled || localParticipant?.attributes?.isDisabledUser === 'true' ? 0.5 : 1,
-              cursor: isUserDisabled || localParticipant?.attributes?.isDisabledUser === 'true' ? 'not-allowed' : 'pointer',
+              pointerEvents: isUserDisabled(localParticipant?.metadata) ? 'none' : 'auto',
+              opacity: isUserDisabled(localParticipant?.metadata) ? 0.5 : 1,
+              cursor: isUserDisabled(localParticipant?.metadata) ? 'not-allowed' : 'pointer',
               position: 'relative'
             }}
-            title={isUserDisabled || localParticipant?.attributes?.isDisabledUser === 'true' ? "您已被禁用，无法申请上麦" : "申请上麦"}
+            title={isUserDisabled(localParticipant?.metadata) ? "您已被禁用，无法申请上麦" : "申请上麦"}
           >
-            {isUserDisabled || localParticipant?.attributes?.isDisabledUser === 'true' ? '🚫 已禁用' : '🙋‍♂️ 申请上麦'}
+            {isUserDisabled(localParticipant?.metadata) ? '🚫 已禁用' : '🙋‍♂️ 申请上麦'}
             {/* 添加一个透明覆盖层，完全阻止点击 */}
-            {(isUserDisabled || localParticipant?.attributes?.isDisabledUser === 'true') && (
+            {isUserDisabled(localParticipant?.metadata) && (
               <div style={{
                 position: 'absolute',
                 top: 0,
@@ -1243,37 +1266,42 @@ export function CustomVideoConference({
     document.addEventListener('click', handler);
     return () => document.removeEventListener('click', handler);
   }, []);
-  // 🎯 批准上麦 - 使用LiveKit原生机制
+  // 🎯 批准上麦 - 调用Gateway API
   const handleApproveToSpeak = async (participant: Participant) => {
     try {
-      console.log(`🎯 批准上麦 - 使用LiveKit原生机制: ${participant.name}`);
+      console.log(`🎯 批准上麦 - 调用Gateway API: ${participant.name}`);
       // 🔍 输出调试信息到调试面板
       const timestamp = new Date().toLocaleTimeString();
-      const debugInfo = `🎯 ${timestamp} 批准上麦 (LiveKit原生)\n` +
+      const debugInfo = `🎯 ${timestamp} 批准上麦 (Gateway API)\n` +
         `  参与者: ${participant.name} (${participant.identity})\n` +
-        `  当前attributes: ${JSON.stringify(participant.attributes)}\n`;
+        `  当前metadata: ${JSON.stringify(participant.metadata)}\n`;
       setDebugInfo(prev => prev + debugInfo);
-      // 🔧 修复：调用正确的API来真正批准上麦并设置发布权限
-      const response = await fetch(`${API_CONFIG.BASE_URL}/admin-control-participants.php`, {
+
+      // 获取Gateway token
+      const token = await resolveGatewayToken();
+
+      // 调用Gateway API批准上麦
+      const response = await callGatewayApi('/api/v1/participants/grant-publish', {
+        room_id: roomInfo?.name,
+        participant_identity: participant.identity,
+        operator_id: userInfo?.uid,
+        action: 'approve_mic',
+        publish_audio: true,
+        publish_video: false,
+        approve_time: new Date().toISOString(),
+      }, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          ...(userToken ? { 'Authorization': `Bearer ${userToken}` } : {})
-        },
-        credentials: 'include',
-        body: JSON.stringify({
-          room_name: roomInfo?.name,
-          target_identity: participant.identity,
-          operator_identity: localParticipant?.identity || userName || 'unknown',
-          action: 'approve_mic'
-        })
+          'Authorization': `Bearer ${token}`,
+        }
       });
-      const result = await response.json();
-      if (!result.success) {
-        throw new Error(result.error || '更新失败');
+
+      if (!response.success) {
+        throw new Error(response.message || '批准失败');
       }
+
       console.log(`✅ 批准参与者 ${participant.identity} 上麦成功`);
-      setDebugInfo(prev => prev + `  ✅ 批准上麦成功 (LiveKit原生机制)\n  新attributes: ${JSON.stringify(participant.attributes)}\n\n`);
+      setDebugInfo(prev => prev + `  ✅ 批准上麦成功 (Gateway API)\n  响应数据: ${JSON.stringify(response.data)}\n\n`);
       // 🎯 添加成功提示
       alert(`✅ 操作成功：${participant.name} 已批准上麦`);
       // 关闭菜单
@@ -1281,162 +1309,141 @@ export function CustomVideoConference({
     } catch (error) {
       console.error('批准上麦失败:', error);
       setDebugInfo(prev => prev + `  ❌ 批准上麦失败: ${error}\n\n`);
+      alert(`❌ 批准失败: ${(error as Error).message}`);
     }
   };
   const handleKickFromMic = async (participant: Participant) => {
     try {
-      console.log('🎯 踢出麦位:', participant.name);
+      console.log('🎯 踢出麦位 - Gateway API:', participant.name);
       // 🔍 输出调试信息到调试面板
       const timestamp = new Date().toLocaleTimeString();
-      const debugInfo = `🎯 ${timestamp} 踢下麦位\n` +
+      const debugInfo = `🎯 ${timestamp} 踢下麦位 (Gateway API)\n` +
         `  参与者: ${participant.name} (${participant.identity})\n` +
-        `  Token状态: ${userToken ? '✅ 存在' : '❌ 不存在'}\n` +
-        `  认证方式: ${userToken ? 'JWT Token' : 'Session Cookie'}\n`;
+        `  当前metadata: ${JSON.stringify(participant.metadata)}\n`;
       setDebugInfo(prev => prev + debugInfo);
-      // 🎯 构建请求头，支持Token认证
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-      };
-      // 如果有Token，添加Authorization头
-      if (userToken) {
-        headers['Authorization'] = `Bearer ${userToken}`;
-        setDebugInfo(prev => prev + `  ✅ 已添加Authorization头\n`);
-      } else {
-        setDebugInfo(prev => prev + `  ⚠️ 没有userToken，将依赖Session认证\n`);
-      }
-      // 🔧 修复：调用正确的API来真正踢下麦位并关闭音频
-      const response = await fetch(`${API_CONFIG.BASE_URL}/admin-control-participants.php`, {
+
+      // 获取Gateway token
+      const token = await resolveGatewayToken();
+
+      // 调用Gateway API踢下麦位
+      const response = await callGatewayApi('/api/v1/participants/kick-mic', {
+        room_id: roomInfo?.name,
+        participant_identity: participant.identity,
+        operator_id: userInfo?.uid,
+        action: 'kick_from_mic',
+        kick_time: new Date().toISOString(),
+      }, {
         method: 'POST',
-        headers,
-        credentials: 'include',
-        body: JSON.stringify({
-          room_name: roomInfo.name,
-          target_identity: participant.identity,
-          operator_identity: localParticipant?.identity || userName || 'unknown',
-          action: 'kick_from_mic'
-        })
-      });
-      const result = await response.json();
-      if (result.success) {
-        console.log(`✅ 踢出参与者 ${participant.identity} 成功`);
-        setDebugInfo(prev => prev + `  ✅ 踢下麦位成功: ${JSON.stringify(result)}\n\n`);
-      } else {
-        console.error('❌ 踢出麦位失败:', result);
-        setDebugInfo(prev => prev + `  ❌ 踢下麦位失败: HTTP ${response.status} - ${JSON.stringify(result)}\n\n`);
-        // 🔍 特别处理401错误，显示详细调试信息
-        if (response.status === 401) {
-          alert(`❌ 踢下麦位失败: 权限不足 (401)\n\n调试信息:\n- Token状态: ${userToken ? '存在' : '不存在'}\n- 认证方式: ${userToken ? 'JWT Token' : 'Session Cookie'}\n- 错误详情: ${result.error || '未知错误'}\n\n请检查调试面板查看详细日志`);
+        headers: {
+          'Authorization': `Bearer ${token}`,
         }
+      });
+
+      if (response.success) {
+        console.log(`✅ 踢出参与者 ${participant.identity} 成功`);
+        setDebugInfo(prev => prev + `  ✅ 踢下麦位成功 (Gateway API)\n  响应数据: ${JSON.stringify(response.data)}\n\n`);
+        alert(`✅ 操作成功：${participant.name} 已踢下麦位`);
+      } else {
+        console.error('❌ 踢出麦位失败:', response.message);
+        setDebugInfo(prev => prev + `  ❌ 踢下麦位失败: ${response.message}\n\n`);
+        alert(`❌ 踢下麦位失败: ${response.message}`);
       }
       // 关闭菜单
       closeMenu();
     } catch (error) {
       console.error('踢出麦位网络错误:', error);
       setDebugInfo(prev => prev + `  ❌ 网络错误: ${error}\n\n`);
+      alert(`❌ 踢下麦位失败: ${(error as Error).message}`);
     }
   };
   const handleMuteMicrophone = async (participant: Participant) => {
     try {
-      console.log('🎯 禁麦:', participant.name);
+      console.log('🎯 禁麦 - Gateway API:', participant.name);
       // 🔍 输出调试信息到调试面板
       const timestamp = new Date().toLocaleTimeString();
-      const debugInfo = `🎯 ${timestamp} 禁麦\n` +
+      const debugInfo = `🎯 ${timestamp} 禁麦 (Gateway API)\n` +
         `  参与者: ${participant.name} (${participant.identity})\n` +
-        `  Token状态: ${userToken ? '✅ 存在' : '❌ 不存在'}\n` +
-        `  认证方式: ${userToken ? 'JWT Token' : 'Session Cookie'}\n`;
+        `  当前metadata: ${JSON.stringify(participant.metadata)}\n`;
       setDebugInfo(prev => prev + debugInfo);
-      // 🎯 构建请求头，支持Token认证
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-      };
-      // 如果有Token，添加Authorization头
-      if (userToken) {
-        headers['Authorization'] = `Bearer ${userToken}`;
-        setDebugInfo(prev => prev + `  ✅ 已添加Authorization头\n`);
-      } else {
-        setDebugInfo(prev => prev + `  ⚠️ 没有userToken，将依赖Session认证\n`);
-      }
-      // 🔧 修复：调用正确的API来真正静音音频轨道
-      const response = await fetch(`${API_CONFIG.BASE_URL}/admin-control-participants.php`, {
+
+      // 获取Gateway token
+      const token = await resolveGatewayToken();
+
+      // 调用Gateway API禁麦
+      const response = await callGatewayApi('/api/v1/participants/batch-set-microphone', {
+        room_id: roomInfo?.name,
+        participant_identity: participant.identity,
+        operator_id: userInfo?.uid,
+        action: 'mute_participant',
+        mute_status: true,
+        mute_time: new Date().toISOString(),
+      }, {
         method: 'POST',
-        headers,
-        credentials: 'include',
-        body: JSON.stringify({
-          room_name: roomInfo.name,
-          target_identity: participant.identity,
-          operator_identity: localParticipant?.identity || userName || 'unknown',
-          action: 'mute_participant'
-        })
-      });
-      const result = await response.json();
-      if (result.success) {
-        console.log(`✅ 禁麦参与者 ${participant.identity} 成功`);
-        setDebugInfo(prev => prev + `  ✅ 禁麦成功: ${JSON.stringify(result)}\n\n`);
-        } else {
-        console.error('❌ 禁麦失败:', result);
-        setDebugInfo(prev => prev + `  ❌ 禁麦失败: HTTP ${response.status} - ${JSON.stringify(result)}\n\n`);
-        // 🔍 特别处理401错误，显示详细调试信息
-        if (response.status === 401) {
-          alert(`❌ 禁麦失败: 权限不足 (401)\n\n调试信息:\n- Token状态: ${userToken ? '存在' : '不存在'}\n- 认证方式: ${userToken ? 'JWT Token' : 'Session Cookie'}\n- 错误详情: ${result.error || '未知错误'}\n\n请检查调试面板查看详细日志`);
+        headers: {
+          'Authorization': `Bearer ${token}`,
         }
+      });
+
+      if (response.success) {
+        console.log(`✅ 禁麦参与者 ${participant.identity} 成功`);
+        setDebugInfo(prev => prev + `  ✅ 禁麦成功 (Gateway API)\n  响应数据: ${JSON.stringify(response.data)}\n\n`);
+        alert(`✅ 操作成功：${participant.name} 已禁麦`);
+      } else {
+        console.error('❌ 禁麦失败:', response.message);
+        setDebugInfo(prev => prev + `  ❌ 禁麦失败: ${response.message}\n\n`);
+        alert(`❌ 禁麦失败: ${response.message}`);
       }
       // 关闭菜单
       closeMenu();
     } catch (error) {
       console.error('禁麦网络错误:', error);
       setDebugInfo(prev => prev + `  ❌ 网络错误: ${error}\n\n`);
+      alert(`❌ 禁麦失败: ${(error as Error).message}`);
     }
   };
   const handleUnmuteMicrophone = async (participant: Participant) => {
     try {
-      console.log('🎯 恢复说话:', participant.name);
+      console.log('🎯 恢复说话 - Gateway API:', participant.name);
       // 🔍 输出调试信息到调试面板
       const timestamp = new Date().toLocaleTimeString();
-      const debugInfo = `🎯 ${timestamp} 恢复说话\n` +
+      const debugInfo = `🎯 ${timestamp} 恢复说话 (Gateway API)\n` +
         `  参与者: ${participant.name} (${participant.identity})\n` +
-        `  Token状态: ${userToken ? '✅ 存在' : '❌ 不存在'}\n` +
-        `  认证方式: ${userToken ? 'JWT Token' : 'Session Cookie'}\n`;
+        `  当前metadata: ${JSON.stringify(participant.metadata)}\n`;
       setDebugInfo(prev => prev + debugInfo);
-      // 🎯 构建请求头，支持Token认证
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-      };
-      // 如果有Token，添加Authorization头
-      if (userToken) {
-        headers['Authorization'] = `Bearer ${userToken}`;
-        setDebugInfo(prev => prev + `  ✅ 已添加Authorization头\n`);
-      } else {
-        setDebugInfo(prev => prev + `  ⚠️ 没有userToken，将依赖Session认证\n`);
-      }
-      // 🔧 修复：调用正确的API来真正解除音频静音
-      const response = await fetch(`${API_CONFIG.BASE_URL}/admin-control-participants.php`, {
+
+      // 获取Gateway token
+      const token = await resolveGatewayToken();
+
+      // 调用Gateway API解除禁麦
+      const response = await callGatewayApi('/api/v1/participants/batch-set-microphone', {
+        room_id: roomInfo?.name,
+        participant_identity: participant.identity,
+        operator_id: userInfo?.uid,
+        action: 'unmute_participant',
+        mute_status: false,
+        unmute_time: new Date().toISOString(),
+      }, {
         method: 'POST',
-        headers,
-        credentials: 'include',
-        body: JSON.stringify({
-          room_name: roomInfo.name,
-          target_identity: participant.identity,
-          operator_identity: localParticipant?.identity || userName || 'unknown',
-          action: 'unmute_participant'
-        })
-      });
-      const result = await response.json();
-      if (result.success) {
-        console.log(`✅ 恢复说话参与者 ${participant.identity} 成功`);
-        setDebugInfo(prev => prev + `  ✅ 恢复说话成功: ${JSON.stringify(result)}\n\n`);
-        } else {
-        console.error('❌ 恢复说话失败:', result);
-        setDebugInfo(prev => prev + `  ❌ 恢复说话失败: HTTP ${response.status} - ${JSON.stringify(result)}\n\n`);
-        // 🔍 特别处理401错误，显示详细调试信息
-        if (response.status === 401) {
-          alert(`❌ 恢复说话失败: 权限不足 (401)\n\n调试信息:\n- Token状态: ${userToken ? '存在' : '不存在'}\n- 认证方式: ${userToken ? 'JWT Token' : 'Session Cookie'}\n- 错误详情: ${result.error || '未知错误'}\n\n请检查调试面板查看详细日志`);
+        headers: {
+          'Authorization': `Bearer ${token}`,
         }
+      });
+
+      if (response.success) {
+        console.log(`✅ 恢复说话参与者 ${participant.identity} 成功`);
+        setDebugInfo(prev => prev + `  ✅ 恢复说话成功 (Gateway API)\n  响应数据: ${JSON.stringify(response.data)}\n\n`);
+        alert(`✅ 操作成功：${participant.name} 已恢复说话`);
+      } else {
+        console.error('❌ 恢复说话失败:', response.message);
+        setDebugInfo(prev => prev + `  ❌ 恢复说话失败: ${response.message}\n\n`);
+        alert(`❌ 恢复说话失败: ${response.message}`);
       }
       // 关闭菜单
       closeMenu();
     } catch (error) {
       console.error('恢复说话网络错误:', error);
       setDebugInfo(prev => prev + `  ❌ 网络错误: ${error}\n\n`);
+      alert(`❌ 恢复说话失败: ${(error as Error).message}`);
     }
   };
   // 监听 LiveKit 断线并自动处理
@@ -2458,36 +2465,40 @@ function MicParticipantList({ currentUserRole, currentUserName, roomInfo, userTo
     const role = parseInt(attributes.role || '1');
     return role;
   };
-  // 🎯 批准上麦函数 - 通过服务端API
+  // 🎯 批准上麦函数 - Gateway API
   const handleApproveMic = async (participant: Participant) => {
     if (!roomInfo?.name) return;
     try {
-      // 🎯 构建请求头，支持Token认证
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-      };
-      // 如果有Token，添加Authorization头
-      if (userToken) {
-        headers['Authorization'] = `Bearer ${userToken}`;
-      }
-      const response = await fetch(`${API_CONFIG.BASE_URL}/admin-control-participants.php`, {
+      console.log(`🎯 批准上麦 - Gateway API: ${participant.name}`);
+
+      // 获取Gateway token
+      const token = await resolveGatewayToken();
+
+      // 调用Gateway API批准上麦
+      const response = await callGatewayApi('/api/v1/participants/grant-publish', {
+        room_id: roomInfo.name,
+        participant_identity: participant.identity,
+        operator_id: userInfo?.uid,
+        action: 'approve_mic',
+        publish_audio: true,
+        publish_video: false,
+        approve_time: new Date().toISOString(),
+      }, {
         method: 'POST',
-        headers,
-        body: JSON.stringify({
-          action: 'approve_mic',
-          room_name: roomInfo.name,
-          target_identity: participant.identity,
-          operator_identity: currentUserName || 'admin'
-        }),
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        }
       });
-      const result = await response.json();
-      if (result.success) {
+
+      if (response.success) {
         console.log(`✅ 批准上麦成功: ${participant.name}`);
       } else {
-        console.error('❌ 批准上麦失败:', result.error);
+        console.error('❌ 批准上麦失败:', response.message);
+        alert(`❌ 批准失败: ${response.message}`);
       }
     } catch (error) {
       console.error(`❌ 批准上麦异常: ${error}`);
+      alert(`❌ 批准失败: ${(error as Error).message}`);
     }
   };
   // 🎯 过滤麦位列表参与者
@@ -2581,42 +2592,85 @@ function MicParticipantTile({ currentUserRole, onApproveMic, userToken, setDebug
     if (!room?.name) return;
     setIsLoading(true);
     try {
-      // 🎯 构建请求头，支持Token认证
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
+      console.log(`🎯 ${action} 操作 - Gateway API: ${participant.name}`);
+
+      // 获取Gateway token
+      const token = await resolveGatewayToken();
+
+      let endpoint = '';
+      let payload: any = {
+        room_id: room.name,
+        participant_identity: participant.identity,
+        operator_id: userInfo?.uid,
+        ...additionalData
       };
-      // 如果有Token，添加Authorization头
-      if (userToken) {
-        headers['Authorization'] = `Bearer ${userToken}`;
+
+      // 根据action选择不同的API端点
+      switch (action) {
+        case 'approve_mic':
+          endpoint = '/api/v1/participants/grant-publish';
+          payload = {
+            ...payload,
+            action: 'approve_mic',
+            publish_audio: true,
+            publish_video: false,
+            approve_time: new Date().toISOString(),
+          };
+          break;
+        case 'kick_from_mic':
+          endpoint = '/api/v1/participants/kick-mic';
+          payload = {
+            ...payload,
+            action: 'kick_from_mic',
+            kick_time: new Date().toISOString(),
+          };
+          break;
+        case 'mute_participant':
+          endpoint = '/api/v1/participants/batch-set-microphone';
+          payload = {
+            ...payload,
+            action: 'mute_participant',
+            mute_status: true,
+            mute_time: new Date().toISOString(),
+          };
+          break;
+        case 'unmute_participant':
+          endpoint = '/api/v1/participants/batch-set-microphone';
+          payload = {
+            ...payload,
+            action: 'unmute_participant',
+            mute_status: false,
+            unmute_time: new Date().toISOString(),
+          };
+          break;
+        default:
+          throw new Error(`不支持的操作: ${action}`);
       }
-      const response = await fetch(`${API_CONFIG.BASE_URL}/admin-control-participants.php`, {
+
+      // 调用Gateway API
+      const response = await callGatewayApi(endpoint, payload, {
         method: 'POST',
-        headers,
-        credentials: 'include', // 🔧 修复：携带Session Cookie
-        body: JSON.stringify({
-          action,
-          room_name: room.name,
-          target_identity: participant.identity,
-          ...additionalData
-        }),
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        }
       });
-      const result = await response.json();
-      if (result.success) {
+
+      if (response.success) {
         console.log(`✅ ${action} 操作成功: ${participant.name}`);
         // 🎯 添加成功提示
-        const actionText = action === 'mute_participant' ? '禁麦' : 
-                          action === 'unmute_participant' ? '解除禁麦' : 
+        const actionText = action === 'mute_participant' ? '禁麦' :
+                          action === 'unmute_participant' ? '解除禁麦' :
                           action === 'kick_from_mic' ? '踢下麦位' :
                           action === 'approve_mic' ? '批准上麦' : action;
         alert(`✅ 操作成功：${participant.name} ${actionText}成功`);
         setShowControlMenu(false);
       } else {
-        console.error(`❌ ${action} 操作失败:`, result.error);
-        alert(`操作失败: ${result.error}`);
+        console.error(`❌ ${action} 操作失败:`, response.message);
+        alert(`操作失败: ${response.message}`);
       }
     } catch (error) {
       console.error(`❌ ${action} 操作异常:`, error);
-      alert('操作失败，请稍后重试');
+      alert(`操作失败: ${(error as Error).message}`);
     } finally {
       setIsLoading(false);
     }

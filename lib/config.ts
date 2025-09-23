@@ -102,6 +102,12 @@ const API_ENDPOINTS: Record<string, string> = {
   gateway_rooms_detail: '/api/v1/rooms/detail',
   gateway_auth_login: '/api/v1/auth/login',
   gateway_auth_register: '/api/v1/auth/register',
+  gateway_auth_logout: '/api/v1/auth/logout',
+  gateway_auth_refresh: '/api/v1/auth/refresh',
+  gateway_participants_request_microphone: '/api/v1/participants/request-microphone',
+  gateway_participants_grant_publish: '/api/v1/participants/grant-publish',
+  gateway_participants_kick_mic: '/api/v1/participants/kick-mic',
+  gateway_participants_batch_microphone: '/api/v1/participants/batch-set-microphone',
 };
 
 export const API_CONFIG = {

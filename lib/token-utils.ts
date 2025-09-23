@@ -1,7 +1,5 @@
-// 🎯 LiveKit Token解析工具
-// 用于从Token中提取角色和麦位状态信息
-
 import { Participant, Track } from 'livekit-client';
+import { getCurrentUserRoleFromContext } from '@/contexts/UserContext';
 
 export interface TokenMetadata {
   role: number;
@@ -14,56 +12,36 @@ export interface ParticipantMicStatus {
   micStatus: 'off_mic' | 'requesting' | 'on_mic' | 'muted';
   displayStatus: 'hidden' | 'visible';
   role: string;
+  roleName?: string;
   joinTime?: string;
   requestTime?: string;
   approveTime?: string;
   lastAction?: string;
   operatorId?: string;
-  isDisabledUser?: boolean;
+  isDisabledUser: boolean;
+  raw?: Record<string, unknown>;
 }
 
+const DEFAULT_PARTICIPANT_STATUS: ParticipantMicStatus = {
+  micStatus: 'off_mic',
+  displayStatus: 'hidden',
+  role: '1',
+  isDisabledUser: false,
+};
 
-export interface ParticipantMetadataPayload {
-  role?: number | string;
-  role_name?: string;
-  mic_status?: string;
-  display_status?: string;
-  last_action?: string;
-  isDisabledUser?: boolean | string;
-  is_disabled_user?: boolean | string;
-  [key: string]: unknown;
-}
-
-export function parseParticipantMetadata(metadata?: string | null): ParticipantMetadataPayload | null {
-  if (!metadata) {
-    return null;
-  }
-
-  try {
-    return JSON.parse(metadata) as ParticipantMetadataPayload;
-  } catch (error) {
-    console.error('Failed to parse participant metadata:', error);
-    return null;
-  }
-}
-
-/**
- * 解析LiveKit Token中的metadata
- */
 export function parseTokenMetadata(token: string): TokenMetadata | null {
   try {
-    // 简单的JWT解析（仅用于客户端，不验证签名）
     const parts = token.split('.');
     if (parts.length !== 3) {
       throw new Error('Invalid JWT format');
     }
-    
+
     const payload = JSON.parse(atob(parts[1]));
-    
+
     if (payload.metadata) {
       return JSON.parse(payload.metadata) as TokenMetadata;
     }
-    
+
     return null;
   } catch (error) {
     console.error('Failed to parse token metadata:', error);
@@ -71,242 +49,280 @@ export function parseTokenMetadata(token: string): TokenMetadata | null {
   }
 }
 
-/**
- * 解析参与者的attributes
- */
-export function parseParticipantAttributes(attributes: Record<string, string>): ParticipantMicStatus {
-  return {
-    micStatus: (attributes.mic_status as any) || 'off_mic',
-    displayStatus: (attributes.display_status as any) || 'hidden',
-    role: attributes.role || '1',
-    joinTime: attributes.join_time,
-    requestTime: attributes.request_time,
-    approveTime: attributes.approve_time,
-    lastAction: attributes.last_action,
-    operatorId: attributes.operator_id,
-    isDisabledUser: attributes.isDisabledUser === 'true'
-  };
+export function parseParticipantMetadata(metadata?: string | null): ParticipantMicStatus {
+  if (!metadata) {
+    return { ...DEFAULT_PARTICIPANT_STATUS };
+  }
+
+  try {
+    const parsed = JSON.parse(metadata);
+    const roleValue = parsed.role;
+    const micStatusValue = parsed.mic_status;
+    const displayStatusValue = parsed.display_status;
+
+    return {
+      ...DEFAULT_PARTICIPANT_STATUS,
+      micStatus: typeof micStatusValue === 'string' ? micStatusValue : DEFAULT_PARTICIPANT_STATUS.micStatus,
+      displayStatus: typeof displayStatusValue === 'string' ? displayStatusValue : DEFAULT_PARTICIPANT_STATUS.displayStatus,
+      role:
+        typeof roleValue === 'string'
+          ? roleValue
+          : typeof roleValue === 'number'
+          ? String(roleValue)
+          : DEFAULT_PARTICIPANT_STATUS.role,
+      roleName: typeof parsed.role_name === 'string' ? parsed.role_name : undefined,
+      joinTime: typeof parsed.join_time === 'string' ? parsed.join_time : undefined,
+      requestTime: typeof parsed.request_time === 'string' ? parsed.request_time : undefined,
+      approveTime: typeof parsed.approve_time === 'string' ? parsed.approve_time : undefined,
+      lastAction: typeof parsed.last_action === 'string' ? parsed.last_action : undefined,
+      operatorId: typeof parsed.operator_id === 'string' ? parsed.operator_id : undefined,
+      isDisabledUser:
+        parsed.isDisabledUser === true ||
+        parsed.isDisabledUser === 'true' ||
+        parsed.is_disabled_user === true ||
+        parsed.is_disabled_user === 'true',
+      raw: typeof parsed === 'object' && parsed ? (parsed as Record<string, unknown>) : undefined,
+    };
+  } catch (error) {
+    console.warn('parseParticipantMetadata fallback', error);
+    return { ...DEFAULT_PARTICIPANT_STATUS };
+  }
 }
 
-/**
- * 检查用户是否有主持人权限
- */
 export function isHost(metadata: TokenMetadata | null): boolean {
   return metadata?.role === 2 || metadata?.role === 3;
 }
 
-/**
- * 检查用户是否为学生
- */
 export function isStudent(metadata: TokenMetadata | null): boolean {
   return metadata?.role === 1;
 }
 
-/**
- * 获取角色显示名称
- */
 export function getRoleDisplayName(metadata: TokenMetadata | null): string {
   if (!metadata) return '游客';
-  
+
   switch (metadata.role) {
-    case 3: return '管理员';
-    case 2: return '主持人';
-    case 1: return '学生';
-    default: return '游客';
+    case 3:
+      return '管理员';
+    case 2:
+      return '主持人';
+    case 1:
+      return '学生';
+    default:
+      return '游客';
   }
 }
 
-/**
- * 检查参与者是否应该显示在麦位列表中
- */
-export function shouldShowInMicList(attributes: Record<string, string>): boolean {
-  const status = parseParticipantAttributes(attributes);
-  return status.displayStatus === 'visible';
+export function shouldShowInMicList(metadata?: string | null): boolean {
+  return parseParticipantMetadata(metadata).displayStatus === 'visible';
 }
 
-/**
- * 检查参与者是否正在申请麦位
- */
-export function isRequestingMic(attributes: Record<string, string>): boolean {
-  const status = parseParticipantAttributes(attributes);
-  return status.micStatus === 'requesting';
+export function isRequestingMic(metadata?: string | null): boolean {
+  return parseParticipantMetadata(metadata).micStatus === 'requesting';
 }
 
-/**
- * 检查参与者是否在麦位上
- */
-export function isOnMic(attributes: Record<string, string>): boolean {
-  const status = parseParticipantAttributes(attributes);
-  return status.micStatus === 'on_mic';
+export function isOnMic(metadata?: string | null): boolean {
+  return parseParticipantMetadata(metadata).micStatus === 'on_mic';
 }
 
-/**
- * 检查参与者是否被静音
- */
-export function isMuted(attributes: Record<string, string>): boolean {
-  const status = parseParticipantAttributes(attributes);
-  return status.micStatus === 'muted';
+export function isMuted(metadata?: string | null): boolean {
+  return parseParticipantMetadata(metadata).micStatus === 'muted';
 }
 
-/**
- * 检查参与者是否可以说话
- */
-export function canSpeak(attributes: Record<string, string>): boolean {
-  const role = parseInt(attributes.role || '1');
-  const micStatus = attributes.mic_status;
-  const isDisabled = isUserDisabled(attributes);
-  
-  // 如果是禁用用户，则不能说话
-  if (isDisabled) return false;
-  
-  // 主持人/管理员默认可以说话，或者已上麦且未被静音
-  return role >= 2 || (micStatus === 'on_mic');
+export function canSpeak(metadata?: string | null): boolean {
+  const status = parseParticipantMetadata(metadata);
+  const role = parseInt(status.role || '1', 10);
+  if (status.isDisabledUser) {
+    return false;
+  }
+  return role >= 2 || status.micStatus === 'on_mic';
 }
 
-/**
- * 检查参与者是否为主持人或管理员
- */
-export function isHostOrAdmin(attributes: Record<string, string>): boolean {
-  const role = parseInt(attributes.role || '1');
+export function isHostOrAdmin(metadata?: string | null): boolean {
+  const status = parseParticipantMetadata(metadata);
+  const role = parseInt(status.role || '1', 10);
   return role >= 2;
 }
 
-/**
- * 检查用户是否已被禁用
- */
-export function isUserDisabled(attributes: Record<string, string>): boolean {
-  // 记录调试日志
-  console.log('isUserDisabled调试 - 输入属性:', attributes);
-  console.log('isUserDisabled调试 - isDisabledUser值:', attributes.isDisabledUser);
-  console.log('isUserDisabled调试 - 值类型:', typeof attributes.isDisabledUser);
-  
-  // 修复逻辑：只有当isDisabledUser明确为"true"字符串时才返回true
-  // 如果是"false"字符串或不存在，都视为未禁用
-  const result = attributes.isDisabledUser === 'true';
-  
-  console.log('isUserDisabled调试 - 最终结果:', result);
-  return result;
+export function isUserDisabled(metadata?: string | null): boolean {
+  return parseParticipantMetadata(metadata).isDisabledUser;
 }
 
-/**
- * 检查是否可以申请上麦
- * 被禁用的用户不能申请上麦
- */
-export function canRequestMic(attributes: Record<string, string>): boolean {
-  const role = parseInt(attributes.role || '1');
-  const isDisabled = isUserDisabled(attributes);
-  
-  // 禁用用户不能申请上麦，主持人/管理员不需要申请上麦
-  if (isDisabled || role >= 2) return false;
-  
-  // 普通会员可以申请上麦
+export function canRequestMic(metadata?: string | null): boolean {
+  const status = parseParticipantMetadata(metadata);
+  const role = parseInt(status.role || '1', 10);
+  if (status.isDisabledUser || role >= 2) {
+    return false;
+  }
   return true;
 }
 
-/**
- * 获取麦位状态的显示文本
- */
-export function getMicStatusText(attributes: Record<string, string>): string {
-  const status = parseParticipantAttributes(attributes);
-  
-  // 如果用户被禁用，显示禁用状态
+export function getMicStatusText(metadata?: string | null): string {
+  const status = parseParticipantMetadata(metadata);
   if (status.isDisabledUser) return '已禁用';
-  
   switch (status.micStatus) {
-    case 'requesting': return '申请中';
-    case 'on_mic': return '已上麦';
-    case 'muted': return '已静音';
+    case 'requesting':
+      return '申请中';
+    case 'on_mic':
+      return '已上麦';
+    case 'muted':
+      return '已静音';
     case 'off_mic':
-    default: return '未上麦';
+    default:
+      return '未上麦';
   }
 }
 
-/**
- * 获取角色显示文本（基于attributes）
- */
-export function getRoleText(attributes: Record<string, string>): string {
-  const role = parseInt(attributes.role || '1');
-  
+export function getRoleText(metadata?: string | null): string {
+  const status = parseParticipantMetadata(metadata);
+  const role = parseInt(status.role || '1', 10);
   switch (role) {
-    case 3: return '管理员';
-    case 2: return '主持人';
-    case 1: return '参会者';
-    default: return '游客';
+    case 3:
+      return '管理员';
+    case 2:
+      return '主持人';
+    case 1:
+      return '参会者';
+    default:
+      return '游客';
   }
 }
 
-/**
- * 检查参与者是否开启了摄像头
- */
 export function isCameraEnabled(participant: Participant): boolean {
   const videoTrack = participant.getTrackPublication(Track.Source.Camera);
-  return !!(
-    videoTrack && 
-    videoTrack.track &&
-    !videoTrack.isMuted && 
-    participant.isCameraEnabled
-  );
+  return !!(videoTrack && videoTrack.track && !videoTrack.isMuted && participant.isCameraEnabled);
 }
 
-/**
- * 检查参与者是否有摄像头轨道（不管是否开启）
- */
 export function hasCameraTrack(participant: Participant): boolean {
   const videoTrack = participant.getTrackPublication(Track.Source.Camera);
   return !!videoTrack;
 }
 
-/**
- * 检查参与者的摄像头是否被静音
- */
 export function isCameraMuted(participant: Participant): boolean {
   const videoTrack = participant.getTrackPublication(Track.Source.Camera);
   return videoTrack?.isMuted || false;
 }
 
-/**
- * 检查是否应该显示视频框
- * 规则：
- * - 主持人/管理员：必须开启摄像头才显示视频框
- * - 普通参与者：根据其他条件决定（暂时默认显示）
- */
 export function shouldShowVideoFrame(participant: Participant): boolean {
-  const attributes = participant.attributes || {};
-  const isHostRole = isHostOrAdmin(attributes);
-  
+  const isHostRole = isHostOrAdmin(participant.metadata);
   if (isHostRole) {
-    // 主持人/管理员：检查摄像头状态
     const cameraEnabled = isCameraEnabled(participant);
-    console.log(`🎥 主持人 ${participant.identity} 摄像头状态检查:`, {
+    console.log(`🎥 主持人${participant.identity} 摄像头状态检测`, {
       hasCameraTrack: hasCameraTrack(participant),
       isCameraMuted: isCameraMuted(participant),
       isCameraEnabled: participant.isCameraEnabled,
-      finalResult: cameraEnabled
+      finalResult: cameraEnabled,
     });
     return cameraEnabled;
-  } else {
-    // 普通参与者：暂时默认显示
-    // 后续可以根据需要添加其他条件
-    return true;
   }
+  return true;
 }
 
-/**
- * 获取视频框状态的显示文本
- */
 export function getVideoFrameStatusText(participant: Participant): string {
-  const attributes = participant.attributes || {};
-  const isHostRole = isHostOrAdmin(attributes);
-  
+  const isHostRole = isHostOrAdmin(participant.metadata);
   if (isHostRole) {
     if (isCameraEnabled(participant)) {
       return '摄像头已开启';
-    } else if (hasCameraTrack(participant) && isCameraMuted(participant)) {
-      return '摄像头已静音';
-    } else {
-      return '摄像头未开启';
     }
-  } else {
-    return '参会者';
+    if (hasCameraTrack(participant) && isCameraMuted(participant)) {
+      return '摄像头已静音';
+    }
+    return '摄像头未开启';
   }
-} 
+  return '参会者';
+}
+
+export function createParticipantMetadata(
+  role: number,
+  micStatus: string = 'off_mic',
+  displayStatus: string = 'visible',
+  additionalData?: Record<string, unknown>
+): string {
+  const metadata = {
+    role: role.toString(),
+    role_name: getRoleNameByNumber(role),
+    mic_status: micStatus,
+    display_status: displayStatus,
+    join_time: new Date().toISOString(),
+    ...additionalData,
+  };
+  return JSON.stringify(metadata);
+}
+
+export function updateParticipantMetadata(
+  currentMetadata: string | null,
+  updates: Partial<{
+    role: number;
+    mic_status: string;
+    display_status: string;
+    last_action: string;
+    operator_id: string;
+    request_time: string;
+    approve_time: string;
+  }>
+): string {
+  const current = parseParticipantMetadata(currentMetadata);
+  const updated = {
+    ...current.raw,
+    ...updates,
+  };
+
+  if (updates.role !== undefined) {
+    updated.role = updates.role.toString();
+    updated.role_name = getRoleNameByNumber(updates.role);
+  }
+
+  return JSON.stringify(updated);
+}
+
+export function getRoleNameByNumber(role: number): string {
+  switch (role) {
+    case 3:
+      return 'admin';
+    case 2:
+      return 'host';
+    case 1:
+      return 'student';
+    default:
+      return 'student';
+  }
+}
+
+export function getCurrentUserRole(): number {
+  return getCurrentUserRoleFromContext();
+}
+
+export function canCurrentUserControlParticipant(targetMetadata?: string | null): boolean {
+  const currentRole = getCurrentUserRole();
+  const targetRole = parseInt(parseParticipantMetadata(targetMetadata).role || '1', 10);
+
+  if (currentRole >= 3) return true;
+  if (currentRole === 2 && targetRole <= 1) return true;
+
+  return false;
+}
+
+export function canCurrentUserKickFromMic(targetMetadata?: string | null): boolean {
+  const currentRole = getCurrentUserRole();
+  const targetStatus = parseParticipantMetadata(targetMetadata);
+  const targetRole = parseInt(targetStatus.role || '1', 10);
+
+  if (currentRole < 2) return false;
+  if (currentRole >= 3) return true;
+  if (currentRole === 2 && targetRole <= 1) return true;
+
+  return false;
+}
+
+export function canCurrentUserMuteParticipant(targetMetadata?: string | null): boolean {
+  return canCurrentUserControlParticipant(targetMetadata);
+}
+
+export function canCurrentUserApproveRequest(targetMetadata?: string | null): boolean {
+  const currentRole = getCurrentUserRole();
+  const targetStatus = parseParticipantMetadata(targetMetadata);
+
+  if (currentRole < 2) return false;
+  if (targetStatus.micStatus !== 'requesting') return false;
+
+  return canCurrentUserControlParticipant(targetMetadata);
+}

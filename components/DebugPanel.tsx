@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useRoomContext, useParticipants, useLocalParticipant } from '@livekit/components-react';
-import { isUserDisabled } from '../lib/token-utils';
+import { parseParticipantMetadata } from '../lib/token-utils';
 
 interface DebugPanelProps {
   onClose?: () => void;
@@ -12,6 +12,8 @@ export function DebugPanel({ onClose }: DebugPanelProps) {
   const room = useRoomContext();
   const participants = useParticipants();
   const { localParticipant } = useLocalParticipant();
+  const localMetadata = localParticipant?.metadata ?? null;
+  const localParsedMeta = React.useMemo(() => parseParticipantMetadata(localMetadata), [localMetadata]);
   const [position, setPosition] = useState({ x: 20, y: 20 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
@@ -28,17 +30,30 @@ export function DebugPanel({ onClose }: DebugPanelProps) {
   // 获取选中参与者的详细信息
   const selectedParticipantInfo = React.useMemo(() => {
     if (!selectedParticipant) return null;
-    
+
     const participant = participants.find(p => p.identity === selectedParticipant);
     if (!participant) return null;
-    
-    const attributes = participant.attributes || {};
+
+    const metadata = participant.metadata ?? null;
+    const parsedMeta = parseParticipantMetadata(metadata);
+
+    let metadataRaw: string;
+    if (metadata) {
+      try {
+        metadataRaw = JSON.stringify(JSON.parse(metadata), null, 2);
+      } catch {
+        metadataRaw = metadata;
+      }
+    } else {
+      metadataRaw = 'null';
+    }
+
     return {
       name: participant.name,
       identity: participant.identity,
-      attributes: attributes,
-      isDisabled: isUserDisabled(attributes),
-      attributesRaw: JSON.stringify(attributes, null, 2)
+      metadata,
+      parsedMeta,
+      metadataRaw,
     };
   }, [selectedParticipant, participants]);
   
@@ -49,10 +64,10 @@ export function DebugPanel({ onClose }: DebugPanelProps) {
     const debugInfo = `
 调试信息 - ${selectedParticipantInfo.name}:
 - 参与者ID: ${selectedParticipantInfo.identity}
-- 属性: ${selectedParticipantInfo.attributesRaw}
-- isDisabled: ${selectedParticipantInfo.isDisabled}
-- isDisabledUser值: ${selectedParticipantInfo.attributes.isDisabledUser}
-- 值类型: ${typeof selectedParticipantInfo.attributes.isDisabledUser}
+- 原始 metadata: ${selectedParticipantInfo.metadataRaw}
+- 是否禁用: ${selectedParticipantInfo.parsedMeta.isDisabledUser}
+- isDisabledUser: ${selectedParticipantInfo.parsedMeta.isDisabledUser}
+- 值类型: ${typeof selectedParticipantInfo.parsedMeta.isDisabledUser}
     `;
     
     alert(debugInfo);
@@ -93,41 +108,30 @@ export function DebugPanel({ onClose }: DebugPanelProps) {
       return;
     }
 
-    setEventListenerStatus('已设置');
+    setEventListenerStatus('已设定');
 
-    const handleAttributesChanged = () => {
-      const attrs = localParticipant.attributes;
-      
-      // 更新当前状态引用
-      prevRole.current = attrs.role;
-      prevMicStatus.current = attrs.mic_status;
-      prevDisplayStatus.current = attrs.display_status;
-      prevLastAction.current = attrs.last_action;
+    const updateCachedState = () => {
+      const parsed = parseParticipantMetadata(localParticipant.metadata);
+      prevRole.current = parsed.role;
+      prevMicStatus.current = parsed.micStatus;
+      prevDisplayStatus.current = parsed.displayStatus;
+      prevLastAction.current = parsed.lastAction;
     };
 
     const handleParticipantMetadataChanged = () => {
-      // 参与者元数据变化处理
+      updateCachedState();
     };
 
-    // 添加所有事件监听器
-    localParticipant.on('attributesChanged', handleAttributesChanged);
+    updateCachedState();
     localParticipant.on('participantMetadataChanged', handleParticipantMetadataChanged);
-    
-    // 初始化状态引用
-    const attrs = localParticipant.attributes;
-    prevRole.current = attrs.role;
-    prevMicStatus.current = attrs.mic_status;
-    prevDisplayStatus.current = attrs.display_status;
-    prevLastAction.current = attrs.last_action;
-    
+
     return () => {
-      localParticipant.off('attributesChanged', handleAttributesChanged);
       localParticipant.off('participantMetadataChanged', handleParticipantMetadataChanged);
-      setEventListenerStatus('已清理');
+      setEventListenerStatus('已清除');
     };
   }, [localParticipant]);
 
-  // 拖拽处理
+  // 拖拽处理  // 拖拽处理
   const handleMouseDown = (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest('.debug-content')) return;
     
@@ -222,10 +226,10 @@ export function DebugPanel({ onClose }: DebugPanelProps) {
           <h4 style={{ margin: '4px 0', color: '#4a9eff' }}>📋 当前状态</h4>
           <div style={{ background: '#222', padding: '8px', borderRadius: '4px', marginBottom: '8px' }}>
             <p style={{ margin: '2px 0' }}>👤 用户: {localParticipant?.name}</p>
-            <p style={{ margin: '2px 0' }}>🔷 角色: "{localParticipant?.attributes?.role}" (string)</p>
-            <p style={{ margin: '2px 0' }}>🎤 麦位: {localParticipant?.attributes?.mic_status}</p>
-            <p style={{ margin: '2px 0' }}>👁️ 显示: {localParticipant?.attributes?.display_status}</p>
-            <p style={{ margin: '2px 0' }}>⚡ 用户禁用: {localParticipant?.attributes?.isDisabledUser === 'true' ? '已禁用' : '未禁用'}</p>
+            <p style={{ margin: '2px 0' }}>🔷 角色: {localParsedMeta.role} (string)</p>
+            <p style={{ margin: '2px 0' }}>🎤 麦位: {localParsedMeta.micStatus}</p>
+            <p style={{ margin: '2px 0' }}>👁️ 显示: {localParsedMeta.displayStatus}</p>
+            <p style={{ margin: '2px 0' }}>⚡ 用户禁用: {localParsedMeta.isDisabledUser ? '已禁用' : '未禁用'}</p>
             <p style={{ margin: '2px 0' }}>⚙️ 事件监听状态: {eventListenerStatus}</p>
           </div>
           
@@ -266,9 +270,9 @@ export function DebugPanel({ onClose }: DebugPanelProps) {
               <div style={{ background: '#222', padding: '10px', borderRadius: '4px' }}>
                 <p><strong>名称:</strong> {selectedParticipantInfo.name}</p>
                 <p><strong>ID:</strong> {selectedParticipantInfo.identity}</p>
-                <p><strong>禁用状态:</strong> {selectedParticipantInfo.isDisabled ? '已禁用' : '正常'}</p>
-                <p><strong>isDisabledUser:</strong> {selectedParticipantInfo.attributes.isDisabledUser || '未设置'}</p>
-                <p><strong>值类型:</strong> {typeof selectedParticipantInfo.attributes.isDisabledUser}</p>
+                <p><strong>禁用状态:</strong> {selectedParticipantInfo.parsedMeta.isDisabledUser ? '已禁用' : '正常'}</p>
+                <p><strong>isDisabledUser:</strong> {selectedParticipantInfo.parsedMeta.isDisabledUser?.toString() || '未设置'}</p>
+                <p><strong>值类型:</strong> {typeof selectedParticipantInfo.parsedMeta.isDisabledUser}</p>
                 
                 <div>
                   <strong>所有属性:</strong>
@@ -280,7 +284,7 @@ export function DebugPanel({ onClose }: DebugPanelProps) {
                     maxHeight: '100px',
                     fontSize: '12px'
                   }}>
-                    {selectedParticipantInfo.attributesRaw}
+                    {selectedParticipantInfo.metadataRaw}
                   </pre>
                 </div>
               </div>

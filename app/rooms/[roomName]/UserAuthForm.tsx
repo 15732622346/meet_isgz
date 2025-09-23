@@ -40,6 +40,9 @@ interface UserAuthFormProps {
 }
 
 export function UserAuthForm({ onLoginSuccess, onGuestMode, roomName }: UserAuthFormProps) {
+  // UserContext集成
+  const { setUserInfo } = useUser();
+
   const [isLogin, setIsLogin] = React.useState(true); // true=登录, false=注册
   const [formData, setFormData] = React.useState({
     username: '',
@@ -153,12 +156,30 @@ export function UserAuthForm({ onLoginSuccess, onGuestMode, roomName }: UserAuth
           }
         : null;
 
-      onLoginSuccess({
-        id: loginData?.uid ?? loginData?.user_id ?? loginData?.id ?? 0,
-        username: formData.username,
-        nickname: loginData?.user_nickname || formData.username,
-        token: liveKitToken,
+      // 保存用户信息到UserContext
+      const userInfo = {
+        uid: loginData?.uid ?? loginData?.user_id ?? loginData?.id ?? 0,
+        user_name: formData.username,
+        user_nickname: loginData?.user_nickname || formData.username,
         user_roles: loginData?.user_roles || 1,
+        user_status: 1, // 活跃状态
+        jwt_token: jwtToken,
+        access_token: loginData?.tokens?.access_token || jwtToken,
+        refresh_token: loginData?.tokens?.refresh_token,
+        access_expires_at: loginData?.tokens?.access_expires_at,
+        refresh_expires_at: loginData?.tokens?.refresh_expires_at,
+        livekit_token: liveKitToken,
+      };
+
+      setUserInfo(userInfo);
+      console.log('✅ 用户信息已保存到UserContext:', userInfo);
+
+      onLoginSuccess({
+        id: userInfo.uid,
+        username: formData.username,
+        nickname: userInfo.user_nickname,
+        token: liveKitToken,
+        user_roles: userInfo.user_roles,
         ws_url:
           loginData?.ws_url ||
           (roomData as any)?.ws_url ||
@@ -274,63 +295,106 @@ export function UserAuthForm({ onLoginSuccess, onGuestMode, roomName }: UserAuth
     }
 
     setLoading(true);
+    setLoadingMessage('强制登录中...');
     try {
-      const apiUrl = await getApiUrl('/force-login.php');
-      const response = await fetch(apiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+      setError('');
+
+      const loginRequest: AuthLoginRequest = {
+        user_name: formData.username,
+        user_password: formData.password,
+        force_login: true, // 强制登录标识
+      };
+
+      const loginResponse = await callGatewayApi<AuthLoginResponse>(
+        await API_CONFIG.getEndpoint('gateway_auth_login'),
+        loginRequest,
+        { method: 'POST' },
+      );
+
+      const loginResult = normalizeGatewayResponse<AuthLoginResponse>(loginResponse);
+      if (!loginResult.success) {
+        setError(loginResult.message || '强制登录失败');
+        return;
+      }
+
+      const loginData = loginResult.payload ?? (loginResponse as AuthLoginResponse);
+      const jwtToken =
+        loginData?.tokens?.access_token ||
+        loginData?.jwt_token ||
+        (typeof (loginResponse as any)?.jwt_token === 'string'
+          ? ((loginResponse as any).jwt_token as string)
+          : '');
+
+      if (!jwtToken) {
+        setError('强制登录异常：未获取到认证信息');
+        return;
+      }
+
+      // 获取房间信息
+      const roomRequest: RoomDetailRequest = {
+        room_id: roomName,
+        invite_code: formData.inviteCode || '',
+      };
+
+      const roomResponse = await callGatewayApi<RoomDetailResponse>(
+        await API_CONFIG.getEndpoint('gateway_rooms_detail'),
+        roomRequest,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${jwtToken}`,
+          }
         },
-        body: JSON.stringify({
-          user_name: formData.username,
-          user_password: formData.password,
-          room_id: roomName,
-          force_login: true
-        }),
+      );
+
+      const roomResult = normalizeGatewayResponse<RoomDetailResponse>(roomResponse);
+      if (!roomResult.success) {
+        setError(roomResult.message || '获取房间信息失败');
+        return;
+      }
+
+      const roomData = roomResult.payload ?? (roomResponse as RoomDetailResponse);
+      const liveKitToken = roomData?.livekit_token || roomData?.token || '';
+
+      // 保存用户信息到UserContext
+      const userInfo = {
+        uid: loginData?.uid ?? loginData?.user_id ?? loginData?.id ?? 0,
+        user_name: formData.username,
+        user_nickname: loginData?.user_nickname || formData.username,
+        user_roles: loginData?.user_roles || 1,
+        user_status: 1,
+        jwt_token: jwtToken,
+        access_token: loginData?.tokens?.access_token || jwtToken,
+        refresh_token: loginData?.tokens?.refresh_token,
+        access_expires_at: loginData?.tokens?.access_expires_at,
+        refresh_expires_at: loginData?.tokens?.refresh_expires_at,
+        livekit_token: liveKitToken,
+      };
+
+      setUserInfo(userInfo);
+      console.log('✅ 强制登录成功，用户信息已保存到UserContext:', userInfo);
+
+      onLoginSuccess({
+        id: userInfo.uid,
+        username: formData.username,
+        nickname: userInfo.user_nickname,
+        token: liveKitToken,
+        user_roles: userInfo.user_roles,
+        jwt_token: jwtToken,
+        ws_url: roomData?.ws_url || '',
+        roomData: roomData ? {
+          maxMicSlots: roomData.max_mic_slots || 10,
+          roomName: roomData.room_name || roomName,
+          roomState: roomData.room_state || 1,
+          audioState: roomData.audio_state || 1,
+          cameraState: roomData.camera_state || 1,
+          chatState: roomData.chat_state || 1,
+          hostUserId: roomData.host_user_id || 0,
+          hostNickname: roomData.host_nickname || '',
+          onlineCount: roomData.online_count || 0,
+          availableSlots: roomData.available_slots || 10,
+        } : null,
       });
-
-      // 检查响应的内容类型
-      const contentType = response.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/json')) {
-        // 如果响应不是JSON格式，很可能是404页面
-        if (response.status === 404) {
-          setError('该房间不存在');
-        } else {
-          setError('服务器错误，请稍后再试');
-        }
-        return;
-      }
-
-      let data;
-      try {
-        data = await response.json();
-      } catch (jsonError) {
-        // JSON解析错误，通常是因为返回了HTML而不是JSON
-        console.error('JSON解析错误:', jsonError);
-        setError('该房间不存在');
-        return;
-      }
-
-      if (!response.ok) {
-        setError(data.error || '强制登录失败');
-        return;
-      }
-
-      if (data.success) {
-        // 强制登录成功
-        const userData = {
-          id: data.uid || data.user_id || data.id || 0, //  修复：使用正确的用户ID字段，提供默认值
-          username: formData.username,
-          nickname: data.user_nickname || formData.username,
-          token: data.token,
-          user_roles: data.user_roles || 1,
-          ws_url: data.ws_url
-        };
-
-        onLoginSuccess(userData);
-      } else {
-        setError(data.error || '强制登录失败');
-      }
     } catch (err) {
       console.error('强制登录错误:', err);
       // 更友好的错误提示
@@ -343,6 +407,7 @@ export function UserAuthForm({ onLoginSuccess, onGuestMode, roomName }: UserAuth
       }
     } finally {
       setLoading(false);
+      setLoadingMessage('');
     }
   };
 

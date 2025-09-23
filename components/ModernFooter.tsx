@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useLocalParticipant, useParticipants, useRoomInfo } from '@livekit/components-react';
 import { callGatewayApi, normalizeGatewayResponse } from '@/lib/api-client';
-import { shouldShowInMicList, parseParticipantMetadata } from '@/lib/token-utils';
+import { parseParticipantMetadata, shouldShowInMicList, isOnMic, isRequestingMic, isHostOrAdmin } from '@/lib/token-utils';
 
 // 🎯 纯 Participant 状态管理的 Hook
 const useParticipantState = (roomDetails?: { maxMicSlots?: number } | null, roleOverride?: number) => {
@@ -12,9 +12,8 @@ const useParticipantState = (roomDetails?: { maxMicSlots?: number } | null, role
   const roomInfo = useRoomInfo();
   
   return React.useMemo(() => {
-
-    const attributes = localParticipant?.attributes || {};
-    const metadataPayload = parseParticipantMetadata(localParticipant?.metadata);
+    const metadata = localParticipant?.metadata ?? null;
+    const participantMeta = parseParticipantMetadata(metadata);
 
     const normalizeRole = (value: unknown): number | undefined => {
       if (typeof value === 'number' && Number.isFinite(value)) {
@@ -54,30 +53,16 @@ const useParticipantState = (roomDetails?: { maxMicSlots?: number } | null, role
     };
 
     const metadataRole =
-      normalizeRole(metadataPayload?.role) ??
-      normalizeRole(metadataPayload?.role_name);
+      normalizeRole(participantMeta.role) ??
+      normalizeRole(participantMeta.roleName);
     const overrideRole = normalizeRole(roleOverride);
-    const attributeRole = normalizeRole(attributes.role);
-    const role = overrideRole ?? metadataRole ?? attributeRole ?? 1;
+    const role = overrideRole ?? metadataRole ?? 1;
 
-    const metadataMicStatus =
-      typeof metadataPayload?.mic_status === 'string' ? metadataPayload.mic_status : undefined;
-    const metadataDisplayStatus =
-      typeof metadataPayload?.display_status === 'string' ? metadataPayload.display_status : undefined;
-    const metadataLastAction =
-      typeof metadataPayload?.last_action === 'string' ? metadataPayload.last_action : undefined;
-    const metadataDisabledValue =
-      metadataPayload?.isDisabledUser ?? metadataPayload?.is_disabled_user;
+    const micStatus = participantMeta.micStatus;
+    const displayStatus = participantMeta.displayStatus;
+    const lastAction = participantMeta.lastAction;
+    const isDisabledUser = participantMeta.isDisabledUser;
 
-    const micStatus = metadataMicStatus ?? attributes.mic_status ?? 'off_mic';
-    const displayStatus = metadataDisplayStatus ?? attributes.display_status ?? 'hidden';
-    const lastAction = metadataLastAction ?? attributes.last_action;
-    const isDisabledUser =
-      metadataDisabledValue === true ||
-      metadataDisabledValue === 'true' ||
-      attributes.isDisabledUser === 'true';
-    
-    // 🎯 基于角色的权限计算
     const isGuest = role === 0;
     const isRegularUser = role === 1;
     const isHost = role === 2;
@@ -85,74 +70,38 @@ const useParticipantState = (roomDetails?: { maxMicSlots?: number } | null, role
     const canUseCamera = role >= 2;
     const canUseScreenShare = role >= 2;
     const canManageRoom = role >= 2;
-    
-    // 🎯 麦克风权限基于 participant 状态计算
-    const canUseMic = React.useMemo(() => {
-      // 被禁用的用户不能使用麦克风
+
+    const canUseMic = (() => {
       if (isDisabledUser) return false;
-      
-      // 主持人/管理员总是可以使用麦克风
       if (role >= 2) return true;
-      
-      // 游客不能使用麦克风
       if (role === 0) return false;
-      
-      // 已静音状态的用户不能使用麦克风
       if (micStatus === 'muted') return false;
-      
-      // 普通用户需要检查麦克风状态
-      // 1. 已上麦的用户可以使用
       if (micStatus === 'on_mic') return true;
-      
-      // 2. 检查是否有发布权限
       const hasPublishPermission = localParticipant?.permissions?.canPublish;
       if (hasPublishPermission) return true;
-      
-      // 3. 其他情况不可用
       return false;
-    }, [role, micStatus, localParticipant?.permissions, isDisabledUser]);
-    
-    // 🎯 麦位统计基于所有参与者状态
-    const micStats = React.useMemo(() => {
-      // 🔧 修改：麦位列表中的人数应该是所有在列表中可见的用户数量，不限于已上麦的用户
-      const micListCount = participants.filter(p => 
-        shouldShowInMicList(p.attributes || {})
-      ).length;
-      
-      // 已上麦的用户数量（仅统计真正上麦的用户）
-      const onMicCount = participants.filter(p => 
-        p.attributes?.mic_status === 'on_mic'
-      ).length;
-      
-      // 申请中的用户数量
-      const requestingCount = participants.filter(p => 
-        p.attributes?.mic_status === 'requesting'
-      ).length;
-      
-      // 是否有主持人在线
-;
-      
-      // 🔧 修复：直接使用roomDetails中的maxMicSlots，确保与父组件保持一致
-      // 不添加默认值，保持与右上角麦位显示一致
-      const maxSlots = roomDetails?.maxMicSlots;
-      
-      return {
-        micListCount,
-        onMicCount,
-        requestingCount,
-                maxSlots,
-        hasAvailableSlots: maxSlots !== undefined ? micListCount < maxSlots : true
-      };
-    }, [participants, roomDetails]);
-    
+    })();
+
+    const micListCount = participants.filter(p => shouldShowInMicList(p.metadata)).length;
+    const onMicCount = participants.filter(p => isOnMic(p.metadata)).length;
+    const requestingCount = participants.filter(p => isRequestingMic(p.metadata)).length;
+    const hasHost = participants.some(p => isHostOrAdmin(p.metadata));
+    const maxSlots = roomDetails?.maxMicSlots;
+
+    const micStats = {
+      micListCount,
+      onMicCount,
+      requestingCount,
+      hasHost,
+      maxSlots,
+      hasAvailableSlots: maxSlots !== undefined ? micListCount < maxSlots : true,
+    };
+
     return {
-      // 基础信息
       role,
       micStatus,
       displayStatus,
       lastAction,
-      
-      // 权限信息
       isGuest,
       isRegularUser,
       isHost,
@@ -162,15 +111,13 @@ const useParticipantState = (roomDetails?: { maxMicSlots?: number } | null, role
       canUseScreenShare,
       canManageRoom,
       canUseMic,
-      
-      // 麦位统计
       micStats,
-      
-      // 原始数据（调试用）
-      attributes,
-      permissions: localParticipant?.permissions
+      metadata,
+      participantMeta,
+      permissions: localParticipant?.permissions,
     };
-  }, [localParticipant?.attributes, localParticipant?.metadata, localParticipant?.permissions, participants, roomDetails, roleOverride]);
+  }, [localParticipant?.metadata, localParticipant?.permissions, participants, roomDetails, roleOverride]);
+
 };
 
 // 🎯 简化的接口，移除不必要的 props
@@ -352,7 +299,8 @@ export function ModernFooter({
       canUseMic: participantState.canUseMic,
       micStatus: participantState.micStatus,
       role: participantState.role,
-      attributes: participantState.attributes,
+      metadata: participantState.metadata,
+      participantMeta: participantState.participantMeta,
       permissions: participantState.permissions
     });
 
@@ -420,7 +368,7 @@ export function ModernFooter({
         console.error('🚨 权限不足详情:', {
           error: error.message,
           permissions: localParticipant?.permissions,
-          attributes: localParticipant?.attributes
+          metadata: localParticipant?.metadata
         });
         alert(`⚠️ 麦克风权限不足！\n\n可能的解决方案：\n1. 联系主持人重新批准上麦\n2. 刷新页面重新登录\n3. 检查您的用户角色权限\n\n错误详情: ${error.message}`);
       } else {

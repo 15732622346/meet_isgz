@@ -4,7 +4,7 @@ import * as React from 'react';
 import { ParticipantTile, VideoTrack, ParticipantName, ConnectionQualityIndicator, TrackMutedIndicator } from '@livekit/components-react';
 import { Participant, Track } from 'livekit-client';
 import { 
-  parseParticipantAttributes, 
+  parseParticipantMetadata, 
   isOnMic, 
   isRequestingMic, 
   isMuted, 
@@ -25,8 +25,8 @@ import {
  * - 🎯 角色区分处理：主持人和普通参与者使用不同的显示规则
  * 
  * 功能特性：
- * 1. 🎯 根据 participant.attributes 动态调整样式
- * 2. 🔄 监听 attributesChanged 事件，实时更新样式
+ * 1. 🎯 根据 participant.metadata 动态调整样式
+ * 2. 🔄 监听 metadata 变化事件，实时更新样式
  * 3. 🎨 支持多种预设样式（主持人、麦位用户、申请中等）
  * 4. 🖱️ 支持点击、双击、拖拽等交互
  * 5. 📱 响应式设计，适配不同屏幕尺寸
@@ -84,33 +84,33 @@ export function AttributeBasedVideoTile({
   draggable = false,
   size = 'auto'
 }: AttributeBasedVideoTileProps) {
-  // 🔄 强制重渲染状态，用于 attributesChanged 事件
+  // 🔄 强制重渲染状态，用于 metadata 变化事件
   const [forceUpdate, setForceUpdate] = React.useState(0);
   
   // 🎯 解析参与者属性
-  const attributes = participant.attributes || {};
-  const participantStatus = parseParticipantAttributes(attributes);
+  const metadata = participant.metadata ?? null;
+  const participantStatus = parseParticipantMetadata(metadata);
   
   // 🎨 根据属性计算样式类名
   const computedClassName = React.useMemo(() => {
     const baseClasses = ['attribute-based-video-tile'];
     
     // 根据角色添加样式类
-    if (isHostOrAdmin(attributes)) {
+    if (isHostOrAdmin(metadata)) {
       baseClasses.push('video-tile-host');
     } else {
       baseClasses.push('video-tile-member');
     }
     
     // 根据麦位状态添加样式类
-    if (isOnMic(attributes)) {
+    if (isOnMic(metadata)) {
       baseClasses.push('video-tile-on-mic');
-    } else if (isRequestingMic(attributes)) {
+    } else if (isRequestingMic(metadata)) {
       baseClasses.push('video-tile-requesting');
     }
     
     // 根据静音状态添加样式类
-    if (isMuted(attributes)) {
+    if (isMuted(metadata)) {
       baseClasses.push('video-tile-muted');
     }
     
@@ -125,7 +125,7 @@ export function AttributeBasedVideoTile({
     }
     
     return baseClasses.join(' ');
-  }, [attributes, size, className, forceUpdate]);
+  }, [metadata, size, className]);
   
   // 🎨 根据属性计算内联样式
   const computedStyle = React.useMemo(() => {
@@ -139,13 +139,13 @@ export function AttributeBasedVideoTile({
     };
     
     // 根据角色调整边框
-    if (isHostOrAdmin(attributes)) {
+    if (isHostOrAdmin(metadata)) {
       baseStyle.border = '2px solid #ff6b35'; // 主持人橙色边框
       baseStyle.boxShadow = '0 0 10px rgba(255, 107, 53, 0.3)';
-    } else if (isOnMic(attributes)) {
+    } else if (isOnMic(metadata)) {
       baseStyle.border = '2px solid #4CAF50'; // 已上麦绿色边框
       baseStyle.boxShadow = '0 0 10px rgba(76, 175, 80, 0.3)';
-    } else if (isRequestingMic(attributes)) {
+    } else if (isRequestingMic(metadata)) {
       baseStyle.border = '2px solid #FFC107'; // 申请中黄色边框
       baseStyle.boxShadow = '0 0 10px rgba(255, 193, 7, 0.3)';
     } else {
@@ -153,7 +153,7 @@ export function AttributeBasedVideoTile({
     }
     
     // 根据静音状态调整透明度
-    if (isMuted(attributes)) {
+    if (isMuted(metadata)) {
       baseStyle.opacity = 0.7;
     }
     
@@ -175,19 +175,19 @@ export function AttributeBasedVideoTile({
     }
     
     return baseStyle;
-  }, [attributes, size, style, onClick, onDoubleClick, forceUpdate]);
+  }, [metadata, size, style, onClick, onDoubleClick]);
   
-  // 🔄 监听 attributesChanged 事件
+  // 🔄 监听 metadata 事件
   React.useEffect(() => {
     const handleAttributesChanged = () => {
-      console.log(`🔄 ${participant.identity} 的属性已更新:`, participant.attributes);
+      console.log(`🔄 ${participant.identity} 的属性已更新:`, participant.metadata);
       setForceUpdate(prev => prev + 1);
     };
     
-    participant.on('attributesChanged', handleAttributesChanged);
+    participant.on('participantMetadataChanged', handleMetadataChanged);
     
     return () => {
-      participant.off('attributesChanged', handleAttributesChanged);
+      participant.off('participantMetadataChanged', handleMetadataChanged);
     };
   }, [participant]);
   
@@ -223,7 +223,7 @@ export function AttributeBasedVideoTile({
     // 🔍 简洁的组件调试信息
     console.log(`🎬 AttributeBasedVideoTile ${participant.identity}:`, {
       shouldShow: showVideo,
-      isHost: isHostOrAdmin(participant.attributes),
+      isHost: isHostOrAdmin(participant.metadata),
       cameraEnabled: isCameraEnabled(participant),
       forceUpdate
     });
@@ -244,7 +244,7 @@ export function AttributeBasedVideoTile({
   
   // 🎯 如果不应该显示视频框，返回 null（完全隐藏）
   if (!shouldShowVideo) {
-    console.log(`🙈 隐藏视频框 - ${participant.identity} (${getRoleText(participant.attributes)})`);
+    console.log(`🙈 隐藏视频框 - ${participant.identity} (${getRoleText(metadata)})`);
     return null;
   }
   
@@ -267,8 +267,8 @@ export function AttributeBasedVideoTile({
       onDoubleClick={handleDoubleClick}
       draggable={draggable}
       data-participant-id={participant.identity}
-      data-participant-role={getRoleText(attributes)}
-      data-mic-status={getMicStatusText(attributes)}
+      data-participant-role={getRoleText(metadata)}
+      data-mic-status={getMicStatusText(metadata)}
     >
       {/* 直接渲染视频元素，不使用额外的容器 */}
       <video 

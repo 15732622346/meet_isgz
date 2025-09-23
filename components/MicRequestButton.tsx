@@ -1,8 +1,8 @@
-﻿'use client';
+'use client';
 
 import React from 'react';
 import { useParticipantContext } from '@livekit/components-react';
-import { isUserDisabled, canRequestMic } from '../lib/token-utils';
+import { parseParticipantMetadata, canRequestMic } from '../lib/token-utils';
 
 interface MicRequestButtonProps {
   userRole?: number;
@@ -11,28 +11,24 @@ interface MicRequestButtonProps {
 
 export function MicRequestButton({ userRole = 1, disabled = false }: MicRequestButtonProps) {
   const participant = useParticipantContext();
-  const attributes = participant?.attributes || {};
-  
-  // 移除自动显示的alert调试信息
-  // 如果需要调试，可以在调试面板中查看
-  
-  // 如果用户是主持人以上角色，不显示申请上麦按钮
+  const metadata = participant?.metadata ?? null;
+  const participantMeta = parseParticipantMetadata(metadata);
+
   if (userRole >= 2) {
     return null;
   }
-  
-  // 检查用户是否被禁用
-  const isDisabled = isUserDisabled(attributes);
-  
-  // 如果用户被禁用，显示禁用状态按钮
+
+  const isDisabled = participantMeta.isDisabledUser;
+  const canRequest = canRequestMic(metadata);
+
   if (isDisabled) {
     return (
-      <button 
+      <button
         className="mic-request-button disabled"
-        disabled={true}
+        disabled
       >
-        无法申请上麦
-        
+        无法申请发言
+
         <style jsx>{`
           .mic-request-button {
             background: linear-gradient(135deg, #4ade80 0%, #22c55e 100%);
@@ -57,17 +53,17 @@ export function MicRequestButton({ userRole = 1, disabled = false }: MicRequestB
   }
 
   const handleClick = () => {
-    console.log('麦克风申请按钮点击 - LiveKit版本');
+    console.log('麦位申请按钮点击 - LiveKit版本');
   };
 
   return (
-    <button 
+    <button
       className="mic-request-button"
       onClick={handleClick}
-      disabled={disabled}
+      disabled={disabled || !canRequest}
     >
-       申请上麦
-      
+      申请发言
+
       <style jsx>{`
         .mic-request-button {
           background: linear-gradient(135deg, #4ade80 0%, #22c55e 100%);
