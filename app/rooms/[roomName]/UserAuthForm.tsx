@@ -173,7 +173,7 @@ export function UserAuthForm({ onLoginSuccess, onGuestMode, roomName }: UserAuth
 
       setUserInfo(userInfo);
       setInviteCode(formData.inviteCode.trim());
-      console.log('✅ 用户信息已保存到UserContext:', userInfo);
+
 
       onLoginSuccess({
         id: userInfo.uid,
@@ -374,7 +374,7 @@ export function UserAuthForm({ onLoginSuccess, onGuestMode, roomName }: UserAuth
 
       setUserInfo(userInfo);
       setInviteCode(formData.inviteCode.trim());
-      console.log('✅ 强制登录成功，用户信息已保存到UserContext:', userInfo);
+
 
       onLoginSuccess({
         id: userInfo.uid,

@@ -292,24 +292,13 @@ export function ModernFooter({
   // 🎯 麦克风按钮点击处理 - 基于 participant 状态
   const handleMicClick = React.useCallback(async () => {
     // 🔍 调试：记录按钮点击事件
-    console.log('🎯 麦克风按钮点击', {
-      room: room?.name,
-      participant: localParticipant?.identity,
-      enabled: localParticipant?.isMicrophoneEnabled,
-      canUseMic: participantState.canUseMic,
-      micStatus: participantState.micStatus,
-      role: participantState.role,
-      metadata: participantState.metadataSource,
-      participantMeta: participantState.participantMeta,
-      permissions: participantState.permissions
-    });
 
     // 🎯 游客权限检查
     if (handleGuestRestriction('麦克风')) return;
     
     // 🎯 权限检查
     if (!isMicAvailable) {
-      console.log('🎯 麦克风不可用，显示提示信息');
+
       
       if (participantState.micStatus === 'requesting') {
         alert('⏳ 您的上麦申请正在等待主持人批准');
@@ -346,7 +335,7 @@ export function ModernFooter({
         if (response.ok) {
           const result = await response.json();
           if (result.success) {
-            console.log('✅ 权限修复成功，等待权限更新生效...');
+
             await new Promise(resolve => setTimeout(resolve, 2000));
           } else {
             console.warn('⚠️ 权限修复失败:', result.error);
@@ -360,7 +349,7 @@ export function ModernFooter({
     // 🎯 执行麦克风切换
     try {
       await localParticipant?.setMicrophoneEnabled(!localParticipant?.isMicrophoneEnabled);
-      console.log('✅ 麦克风状态切换成功');
+
     } catch (error) {
       console.error('❌ 麦克风切换失败:', error);
       

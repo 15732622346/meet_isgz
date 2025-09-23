@@ -170,7 +170,7 @@ export function UserProvider({ children }: UserProviderProps) {
         };
 
         setUserInfo(updatedUserInfo);
-        console.log('✅ Token自动刷新成功');
+
 
         return response.data.access_token;
       } catch (error) {
@@ -198,7 +198,7 @@ export function UserProvider({ children }: UserProviderProps) {
             Authorization: `Bearer ${userInfo.jwt_token}`
           }
         });
-        console.log('✅ 后端登出成功');
+
       }
     } catch (error) {
       console.error('❌ 后端登出失败:', error);

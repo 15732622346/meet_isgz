@@ -129,9 +129,6 @@ export function CustomVideoConference({
   hostUserId,
 }: CustomVideoConferenceProps) {
   // 🎯 版本标识 - LiveKit原生机制重构版本
-  console.log('🚀🚀🚀 CustomVideoConference 版本: v2024.06.29.21.30 - LiveKit原生机制重构版本 🚀🚀🚀');
-  console.log('🔧 重构内容: 移除自定义状态管理，使用participant.attributes + attributesChanged事件');
-  console.log('📅 部署时间: 2025年6月29日 21:30');
   // 🎯 版本验证弹窗已移除
   const [widgetState, setWidgetState] = React.useState<CustomWidgetState>({
     showChat: false,
@@ -186,8 +183,6 @@ export function CustomVideoConference({
   const roomInfo = useRoomInfo();
   const roomCtx = useRoomContext();
   const router = useRouter();
-  console.log('Component Render - roomDetails:', roomDetails);
-  console.log('Component Render - roomInfo.name:', roomInfo.name);
   const tracks = useTracks(
     [
       { source: Track.Source.Camera, withPlaceholder: true },
@@ -197,17 +192,10 @@ export function CustomVideoConference({
   );
   const layoutContext = useCreateLayoutContext();
   React.useEffect(() => {
-    console.log('🔭 Tracks update', tracks.map(track => ({
-      participant: track.participant?.identity,
-      isLocal: track.participant?.isLocal,
-      source: track.source,
-      hasTrack: Boolean(track.publication?.track)
-    })), 'localCameraEnabled', isLocalCameraEnabled);
   }, [tracks, isLocalCameraEnabled]);
   // 🎯 当房间连接时，获取房间详情
       React.useEffect(() => {
     if (!roomInfo.name) {
-      console.log('[room] skip fetching room detail: missing room name');
       return;
     }
     if (!inviteCode) {
@@ -277,11 +265,9 @@ export function CustomVideoConference({
     if (!roomCtx) return;
     const handleMetadataChanged = () => {
       try {
-        console.log('🔄 房间元数据更新:', roomCtx.metadata);
         if (!roomCtx.metadata) return;
         const metadata = JSON.parse(roomCtx.metadata);
         if (metadata && typeof metadata.maxMicSlots === 'number') {
-          console.log('✅ 从元数据更新最大麦位数:', metadata.maxMicSlots);
           // 更新roomDetails中的maxMicSlots，确保类型安全
           setRoomDetails(prev => {
             if (!prev) return {
@@ -382,11 +368,9 @@ export function CustomVideoConference({
     // 创建一个Map保存每个参与者的处理函数
     const handlersMap = new Map();
     const handleAttributesChanged = (participant: Participant) => {
-      console.log(`🔄 参与者属性变化 - ${participant.name}:`, participant.attributes);
       // 检查是否有聊天禁言状态更新
       if (participant.attributes?.chatGlobalMute !== undefined) {
         const newMuteState = participant.attributes.chatGlobalMute === "true";
-        console.log(`📢 收到聊天禁言状态更新: ${newMuteState ? '禁言' : '恢复发言'}`);
         setChatGlobalMute(newMuteState);
       }
       // 强制触发UI重新渲染
@@ -625,7 +609,7 @@ export function CustomVideoConference({
           chatGlobalMute: newMuteState ? "true" : "false",
           updatedAt: new Date().toISOString()
         }).then(() => {
-          console.log(`✅ 禁言状态已更新到参与者attributes: ${newMuteState ? '禁言' : '恢复发言'}`);
+
         }).catch((err) => {
           console.error('❌ 更新参与者attributes失败:', err);
         });
@@ -976,12 +960,6 @@ export function CustomVideoConference({
         if (!isHostOrAdmin) {
           const now = Date.now();
           const timeSinceLastSent = now - lastSentTimeRef.current;
-          console.log('消息发送检查:', {
-            now,
-            lastSent: lastSentTimeRef.current,
-            timeDiff: timeSinceLastSent,
-            withinCooldown: timeSinceLastSent < MESSAGE_COOLDOWN
-          });
           // 检查是否在冷却时间内
           if (timeSinceLastSent < MESSAGE_COOLDOWN) {
             const remainingTime = Math.ceil((MESSAGE_COOLDOWN - timeSinceLastSent) / 1000);
@@ -1005,7 +983,7 @@ export function CustomVideoConference({
         }
         // 更新最后发送时间
         lastSentTimeRef.current = Date.now();
-        console.log('更新最后发送时间:', lastSentTimeRef.current);
+
         // 通过检查，调用原始提交处理
         if (originalSubmit) {
           return originalSubmit.call(form, e);
@@ -1051,18 +1029,18 @@ export function CustomVideoConference({
           selfBrowserSurface: 'exclude' as any,
           surfaceSwitching: 'include' as any
         };
-        console.log('🎯 开始屏幕分享，尝试包含系统音频...');
+
         // 获取屏幕分享流（包含音频）
         const screenStream = await navigator.mediaDevices.getDisplayMedia(displayMediaOptions);
         // 检查是否成功获取了音频轨道
         const videoTrack = screenStream.getVideoTracks()[0];
         const audioTrack = screenStream.getAudioTracks()[0];
-        console.log(`📺 视频轨道: ${videoTrack ? '✅ 已获取' : '❌ 未获取'}`);
-        console.log(`🔊 音频轨道: ${audioTrack ? '✅ 已获取 (包含系统音频)' : '❌ 未获取'}`);
+
+
         if (audioTrack) {
-          console.log('🎉 成功获取系统音频！学生们可以听到纪录片的声音');
+
         } else {
-          console.log('⚠️ 未获取到系统音频，只有视频');
+
         }
         // 🎯 手动发布屏幕分享轨道到LiveKit
         if (videoTrack) {
@@ -1083,23 +1061,23 @@ export function CustomVideoConference({
         }
         // 监听流结束事件
         videoTrack?.addEventListener('ended', () => {
-          console.log('📺 屏幕分享视频流已结束');
+
           setIsScreenSharing(false);
         });
         audioTrack?.addEventListener('ended', () => {
-          console.log('🔊 屏幕分享音频流已结束');
+
         });
         setIsScreenSharing(true);
         // 🎯 不再自动关闭摄像头，让用户自己决定是否需要同时显示摄像头
         // 这样可以同时进行屏幕分享和摄像头显示
       } else {
         // 停止屏幕分享
-        console.log('⏹️ 停止屏幕分享...');
+
         // 🎯 停止所有屏幕分享相关的轨道
         const publications = Array.from(localParticipant.trackPublications.values());
         for (const pub of publications) {
           if (pub.source === Track.Source.ScreenShare || pub.source === Track.Source.ScreenShareAudio) {
-            console.log(`🛑 停止轨道: ${pub.trackName} (${pub.source})`);
+
             await localParticipant.unpublishTrack(pub.track!);
           }
         }
@@ -1132,15 +1110,10 @@ export function CustomVideoConference({
 
     try {
       const shouldEnable = !isLocalCameraEnabled;
-      console.log('🎥 toggleCamera -> shouldEnable', shouldEnable);
+
       await localParticipant.setCameraEnabled(shouldEnable);
       setIsLocalCameraEnabled(shouldEnable);
       const cameraTrack = localParticipant.getTrackPublication(Track.Source.Camera);
-      console.log('🎥 after toggle, camera track state', {
-        hasTrack: !!cameraTrack,
-        isMuted: cameraTrack?.isMuted,
-        participantEnabled: localParticipant.isCameraEnabled
-      });
     } catch (error) {
       console.error('切换摄像头失败:', error);
       alert('切换摄像头失败: ' + (error as Error).message);
@@ -1240,7 +1213,7 @@ export function CustomVideoConference({
               }
 
               try {
-                console.log(`🎯 申请上麦 - 调用后端API: ${localParticipant?.name}`);
+
                 if (!localParticipant) {
                   console.error('❌ localParticipant 不存在');
                   alert('❌ 申请失败：用户信息不存在');
@@ -1266,7 +1239,7 @@ export function CustomVideoConference({
                 const { success, message } = normalizeGatewayResponse(rawResponse);
 
                 if (success) {
-                  console.log('✅ 申请上麦成功 - 后端已处理');
+
                   alert('✅ 申请成功！等待主持人批准');
                 } else {
                   throw new Error(message || '申请失败');
@@ -1389,11 +1362,11 @@ export function CustomVideoConference({
   }, [micGlobalMute, localParticipant, userRole]);
   const [expandedMenuId, setExpandedMenuId] = React.useState<string | null>(null);
   const toggleMenu = (id: string) => {
-    console.log('toggleMenu clicked, participant id:', id);
-    console.log('current expandedMenuId:', expandedMenuId);
+
+
     setExpandedMenuId(prev => {
       const newValue = prev === id ? null : id;
-      console.log('setting expandedMenuId to:', newValue);
+
       return newValue;
     });
   };
@@ -1406,7 +1379,7 @@ export function CustomVideoConference({
   // 🎯 批准上麦 - 调用Gateway API
   const handleApproveToSpeak = async (participant: Participant) => {
     try {
-      console.log(`🎯 批准上麦 - 调用Gateway API: ${participant.name}`);
+
       // 🔍 输出调试信息到调试面板
       const timestamp = new Date().toLocaleTimeString();
       const debugInfo = `🎯 ${timestamp} 批准上麦 (Gateway API)\n` +
@@ -1448,7 +1421,7 @@ export function CustomVideoConference({
         throw new Error(response.message || '批准失败');
       }
 
-      console.log(`✅ 批准参与者 ${participant.identity} 上麦成功`);
+
       setDebugInfo(prev => prev + `  ✅ 批准上麦成功 (Gateway API)\n  响应数据: ${JSON.stringify(response.data)}\n\n`);
       // 🎯 添加成功提示
       alert(`✅ 操作成功：${participant.name} 已批准上麦`);
@@ -1462,7 +1435,7 @@ export function CustomVideoConference({
   };
   const handleKickFromMic = async (participant: Participant) => {
     try {
-      console.log('🎯 踢出麦位 - Gateway API:', participant.name);
+
       // 🔍 输出调试信息到调试面板
       const timestamp = new Date().toLocaleTimeString();
       const debugInfo = `🎯 ${timestamp} 踢下麦位 (Gateway API)\n` +
@@ -1496,7 +1469,7 @@ export function CustomVideoConference({
       });
 
       if (response.success) {
-        console.log(`✅ 踢出参与者 ${participant.identity} 成功`);
+
         setDebugInfo(prev => prev + `  ✅ 踢下麦位成功 (Gateway API)\n  响应数据: ${JSON.stringify(response.data)}\n\n`);
         alert(`✅ 操作成功：${participant.name} 已踢下麦位`);
       } else {
@@ -1514,7 +1487,7 @@ export function CustomVideoConference({
   };
   const handleMuteMicrophone = async (participant: Participant) => {
     try {
-      console.log('🎯 禁麦 - Gateway API:', participant.name);
+
       // 🔍 输出调试信息到调试面板
       const timestamp = new Date().toLocaleTimeString();
       const debugInfo = `🎯 ${timestamp} 禁麦 (Gateway API)\n` +
@@ -1549,7 +1522,7 @@ export function CustomVideoConference({
       });
 
       if (response.success) {
-        console.log(`✅ 禁麦参与者 ${participant.identity} 成功`);
+
         setDebugInfo(prev => prev + `  ✅ 禁麦成功 (Gateway API)\n  响应数据: ${JSON.stringify(response.data)}\n\n`);
         alert(`✅ 操作成功：${participant.name} 已禁麦`);
       } else {
@@ -1567,7 +1540,7 @@ export function CustomVideoConference({
   };
   const handleUnmuteMicrophone = async (participant: Participant) => {
     try {
-      console.log('🎯 恢复说话 - Gateway API:', participant.name);
+
       // 🔍 输出调试信息到调试面板
       const timestamp = new Date().toLocaleTimeString();
       const debugInfo = `🎯 ${timestamp} 恢复说话 (Gateway API)\n` +
@@ -1602,7 +1575,7 @@ export function CustomVideoConference({
       });
 
       if (response.success) {
-        console.log(`✅ 恢复说话参与者 ${participant.identity} 成功`);
+
         setDebugInfo(prev => prev + `  ✅ 恢复说话成功 (Gateway API)\n  响应数据: ${JSON.stringify(response.data)}\n\n`);
         alert(`✅ 操作成功：${participant.name} 已恢复说话`);
       } else {
@@ -1637,7 +1610,7 @@ export function CustomVideoConference({
         });
         if (response.ok) {
           const result = await response.json();
-          console.log('Session cleared:', result);
+
         } else {
           console.warn('Failed to clear session:', response.status);
         }
@@ -1666,9 +1639,9 @@ export function CustomVideoConference({
       const newDisabledState = localParticipant.attributes?.isDisabledUser === 'true';
       const timestamp = new Date().toLocaleTimeString();
       // 增强调试日志
-      console.log('🔄 本地参与者属性变化检测:', localParticipant.attributes);
-      console.log('当前禁用状态:', oldDisabledState);
-      console.log('属性中的禁用标记:', localParticipant.attributes?.isDisabledUser);
+
+
+
       // 添加到调试面板
       setDebugInfo(prev => prev + 
         `\n[${timestamp}] 🔍 属性变化检测:\n` +
@@ -1689,12 +1662,12 @@ export function CustomVideoConference({
       }
       // 检查禁用状态并更新
       if (localParticipant.attributes?.isDisabledUser === 'true') {
-        console.log('🚫 用户被禁用状态变化: true');
+
         setIsLocalUserDisabled(true);
         // 添加到调试面板
         setDebugInfo(prev => prev + `\n[${timestamp}] 🚫 用户被禁用!\n`);
       } else {
-        console.log('✅ 用户禁用状态变化: false');
+
         setIsLocalUserDisabled(false);
         // 添加到调试面板
         setDebugInfo(prev => prev + `\n[${timestamp}] ✅ 用户禁用状态解除\n`);
@@ -2234,13 +2207,6 @@ interface MainVideoDisplayProps {
 }
 type TrackReference = ReturnType<typeof useTracks>[number];
 
-const CAMERA_TILE_LOG_PREFIX = '📺 [CameraTileDebug]';
-const logCameraTileDecision = (stage: string, detail: Record<string, unknown>) => {
-  if (typeof window === 'undefined') {
-    return;
-  }
-  console.log(`${CAMERA_TILE_LOG_PREFIX} ${stage}`, detail);
-};
 
 const shouldRenderCameraTile = (
   trackRef: TrackReference,
@@ -2279,45 +2245,34 @@ const shouldRenderCameraTile = (
     isLocalCameraEnabled,
   };
 
-  logCameraTileDecision('evaluate', baseDetails);
 
   if (trackRef.source !== Track.Source.Camera) {
-    logCameraTileDecision('skip-non-camera-source', baseDetails);
     return true;
   }
 
   if (!publication) {
-    logCameraTileDecision('skip-no-publication', baseDetails);
     return false;
   }
 
   if (publication.isMuted) {
-    logCameraTileDecision('skip-muted-publication', baseDetails);
     return false;
   }
 
   if (!publication.track) {
-    logCameraTileDecision('skip-missing-track', baseDetails);
     return false;
   }
 
   if (!participant) {
-    logCameraTileDecision('skip-no-participant', baseDetails);
     return false;
   }
 
   if (participant.isLocal && (userRole === 2 || userRole === 3)) {
     const localCameraActive = isLocalCameraEnabled ?? participant.isCameraEnabled;
     if (localCameraActive === false) {
-      logCameraTileDecision('skip-local-host-camera-disabled', {
-        ...baseDetails,
-        localCameraActive,
-      });
       return false;
     }
   }
 
-  logCameraTileDecision('render', baseDetails);
   return true;
 };
 // 简化版本：不再判断“主持人是否在场”，始终渲染会议界面
@@ -2686,7 +2641,7 @@ function MicParticipantList({ currentUserRole, currentUserName, roomInfo, userTo
   const handleApproveMic = async (participant: Participant) => {
     if (!roomInfo?.name) return;
     try {
-      console.log(`🎯 批准上麦 - Gateway API: ${participant.name}`);
+
 
       // 获取Gateway token
       const token = await resolveGatewayToken();
@@ -2718,7 +2673,7 @@ function MicParticipantList({ currentUserRole, currentUserName, roomInfo, userTo
       });
 
       if (response.success) {
-        console.log(`✅ 批准上麦成功: ${participant.name}`);
+
       } else {
         console.error('❌ 批准上麦失败:', response.message);
         alert(`❌ 批准失败: ${response.message}`);
@@ -2822,7 +2777,7 @@ function MicParticipantTile({ currentUserRole, onApproveMic, userToken, setDebug
     if (!room?.name) return;
     setIsLoading(true);
     try {
-      console.log(`🎯 ${action} 操作 - Gateway API: ${participant.name}`);
+
 
       // 获取Gateway token
       const token = await resolveGatewayToken();
@@ -2899,7 +2854,7 @@ function MicParticipantTile({ currentUserRole, onApproveMic, userToken, setDebug
       });
 
       if (response.success) {
-        console.log(`✅ ${action} 操作成功: ${participant.name}`);
+
         // 🎯 添加成功提示
         const actionText = action === 'mute' ? '禁麦' :
                           action === 'unmute' ? '解除禁麦' :
@@ -2934,7 +2889,7 @@ function MicParticipantTile({ currentUserRole, onApproveMic, userToken, setDebug
       if (setDebugInfo) {
         setDebugInfo(prev => prev + debugInfoText);
       } else {
-        console.log('🔍 调试信息:', debugInfoText);
+
       }
       // 🎯 构建请求头，支持Token认证
       const headers: Record<string, string> = {
@@ -2965,7 +2920,7 @@ function MicParticipantTile({ currentUserRole, onApproveMic, userToken, setDebug
       });
       const result = await response.json();
       if (result.success) {
-        console.log(`✅ 更新属性成功: ${participant.name}`, result);
+
         if (setDebugInfo) {
           setDebugInfo(prev => prev + `  ✅ 批准上麦成功: ${JSON.stringify(result)}\n\n`);
         }
@@ -2974,12 +2929,6 @@ function MicParticipantTile({ currentUserRole, onApproveMic, userToken, setDebug
         setShowControlMenu(false);
       } else {
         console.error('❌ 更新属性失败:', result);
-        console.log('🔍 401错误详情:', {
-          status: response.status,
-          statusText: response.statusText,
-          result,
-          headers: Object.fromEntries(response.headers.entries())
-        });
         if (setDebugInfo) {
           setDebugInfo(prev => prev + `  ❌ 批准上麦失败: HTTP ${response.status} - ${JSON.stringify(result)}\n\n`);
         }

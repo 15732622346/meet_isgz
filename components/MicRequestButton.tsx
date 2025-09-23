@@ -53,7 +53,7 @@ export function MicRequestButton({ userRole = 1, disabled = false }: MicRequestB
   }
 
   const handleClick = () => {
-    console.log('麦位申请按钮点击 - LiveKit版本');
+
   };
 
   return (

@@ -49,7 +49,7 @@ export function FloatingWrapper({
             footerHeight = footer.offsetHeight;
           }
           
-          console.log('🔍 找到外层flex容器:', rect);
+
           
           return {
             width: rect.width - 10, // 留出少量边距
@@ -64,7 +64,7 @@ export function FloatingWrapper({
         if (videoDisplay) {
           const rect = videoDisplay.getBoundingClientRect();
           
-          console.log('🔍 找到main-video-display:', rect);
+
           
           return {
             width: rect.width - 10,
@@ -75,7 +75,7 @@ export function FloatingWrapper({
         }
         
         // 如果都找不到，使用视口尺寸的80%作为后备方案
-        console.log('⚠️ 未找到合适的容器，使用默认尺寸');
+
         
         return {
           width: window.innerWidth * 0.8,

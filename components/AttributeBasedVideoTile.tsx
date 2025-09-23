@@ -181,7 +181,7 @@ export function AttributeBasedVideoTile({
   // 🔄 监听 metadata 事件
   React.useEffect(() => {
     const handleMetadataChanged = () => {
-      console.log(`🔄 ${participant.identity} 的属性已更新:`, participant.metadata);
+
       setForceUpdate(prev => prev + 1);
     };
     
@@ -195,7 +195,7 @@ export function AttributeBasedVideoTile({
   // 🎥 监听摄像头状态变化事件
   React.useEffect(() => {
     const handleTrackChanged = () => {
-      console.log(`🎥 ${participant.identity} 的摄像头状态变化`);
+
       setForceUpdate(prev => prev + 1); // 触发重新渲染
     };
     
@@ -222,12 +222,6 @@ export function AttributeBasedVideoTile({
     const showVideo = shouldShowVideoFrame(participant);
     
     // 🔍 简洁的组件调试信息
-    console.log(`🎬 AttributeBasedVideoTile ${participant.identity}:`, {
-      shouldShow: showVideo,
-      isHost: isHostOrAdmin(participant.metadata),
-      cameraEnabled: isCameraEnabled(participant),
-      forceUpdate
-    });
     
     return showVideo;
   }, [participant, forceUpdate]);
@@ -245,7 +239,7 @@ export function AttributeBasedVideoTile({
   
   // 🎯 如果不应该显示视频框，返回 null（完全隐藏）
   if (!shouldShowVideo) {
-    console.log(`🙈 隐藏视频框 - ${participant.identity} (${getRoleText(metadataSource)})`);
+
     return null;
   }
   
