@@ -213,32 +213,32 @@ export function ModernFooter({
     const isCancelling = participantState.micStatus === 'requesting';
 
     if (participantState.isDisabledUser && !isCancelling) {
-      alert('????????????');
+      alert('麦位申请已取消');
       return;
     }
 
-    if (!isCancelling && handleGuestRestriction('????')) {
+    if (!isCancelling && handleGuestRestriction('申请上麦')) {
       return;
     }
 
     if (!isCancelling && !participantState.micStats.hasAvailableSlots) {
-      alert(`????????????? ${participantState.micStats.micListCount}/${maxMicSlotsLabel} ??????????????`);
+      alert(`麦位已满，当前 ${participantState.micStats.micListCount}/${maxMicSlotsLabel}，无法申请`);
       return;
     }
 
     const targetRoomName = roomInfo?.name || roomDetails?.roomName || roomName;
     if (!targetRoomName) {
-      alert('?????????????????');
+      alert('您无权限申请上麦');
       return;
     }
 
     if (!jwtToken) {
-      alert('?????????????????????');
+      alert('麦位已满，无法申请');
       return;
     }
 
     if (!userId) {
-      alert('???????????????');
+      alert('申请上麦成功');
       return;
     }
 
@@ -266,23 +266,23 @@ export function ModernFooter({
       const success = normalized.success || payload?.success === true;
 
       if (!success) {
-        const message = normalized.error || normalized.message || payload?.message || payload?.error || '??????????';
+        const message = normalized.error || normalized.message || payload?.message || payload?.error || '未知错误';
         throw new Error(message);
       }
 
       if (action === 'raise_hand') {
         onMicStatusChange('requesting');
-        alert('????????????????');
+        alert('申请上麦失败');
       } else {
         onMicStatusChange('off_mic');
-        alert('???????');
+        alert('网络错误');
       }
     } catch (error) {
-      console.error('??/??????:', error);
+      console.error('申请/取消错误:', error);
       if (error instanceof Error) {
-        alert(error.message || '??????????');
+        alert(error.message || '未知错误');
       } else {
-        alert('??????????');
+        alert('操作失败');
       }
     } finally {
       setMicRequestLoading(false);
@@ -424,30 +424,30 @@ export function ModernFooter({
             }
             title={
               participantState.isDisabledUser && !isRequestingMic
-                ? '????????????'
+                ? '用户已被禁用'
                 : participantState.isGuest
-                  ? '?????????'
+                  ? '游客模式'
                   : isRequestingMic
-                    ? '??????'
+                    ? '申请中'
                     : !participantState.micStats.hasAvailableSlots
-                      ? `???? (${participantState.micStats.micListCount}/${maxMicSlotsLabel})`
+                      ? `麦位已满 (${participantState.micStats.micListCount}/${maxMicSlotsLabel})`
                       : micRequestLoading
-                        ? '??????????'
-                        : `???? (${participantState.micStats.micListCount}/${maxMicSlotsLabel})`
+                        ? '申请中...'
+                        : `申请上麦 (${participantState.micStats.micListCount}/${maxMicSlotsLabel})`
             }
             style={{ position: 'relative' }}
           >
-            <span className="btn-icon">{participantState.isDisabledUser ? '??' : isRequestingMic ? '?' : '?????'}</span>
+            <span className="btn-icon">{participantState.isDisabledUser ? '🚫' : isRequestingMic ? '⏳' : '🎤'}</span>
             <span className="btn-label">
               {participantState.isDisabledUser
-                ? '???'
+                ? '禁用'
                 : micRequestLoading
-                  ? '???...'
+                  ? '申请中...'
                   : !isRequestingMic && !participantState.micStats.hasAvailableSlots
-                    ? `???? (${participantState.micStats.micListCount}/${maxMicSlotsLabel})`
+                    ? `已满 (${participantState.micStats.micListCount}/${maxMicSlotsLabel})`
                     : isRequestingMic
-                      ? '????'
-                      : `???? (${participantState.micStats.micListCount}/${maxMicSlotsLabel})`}
+                      ? '申请中'
+                      : `申请 (${participantState.micStats.micListCount}/${maxMicSlotsLabel})`}
             </span>
 
             {participantState.isDisabledUser && !isRequestingMic && (
@@ -470,10 +470,10 @@ export function ModernFooter({
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  alert('????????????');
+                  alert('麦位申请已取消');
                 }}
               >
-                <span style={{ color: '#ff6b6b', fontWeight: 'bold', fontSize: '12px' }}>?? ???</span>
+                <span style={{ color: '#ff6b6b', fontWeight: 'bold', fontSize: '12px' }}>已禁用</span>
               </div>
             )}
           </button>

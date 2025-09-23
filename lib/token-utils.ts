@@ -22,6 +22,8 @@ export interface ParticipantMicStatus {
   raw?: Record<string, unknown>;
 }
 
+export type ParticipantMetadataSource = string | null | undefined | Record<string, unknown>;
+
 const DEFAULT_PARTICIPANT_STATUS: ParticipantMicStatus = {
   micStatus: 'off_mic',
   displayStatus: 'hidden',
@@ -49,45 +51,67 @@ export function parseTokenMetadata(token: string): TokenMetadata | null {
   }
 }
 
-export function parseParticipantMetadata(metadata?: string | null): ParticipantMicStatus {
-  if (!metadata) {
+export function parseParticipantMetadata(metadata?: ParticipantMetadataSource): ParticipantMicStatus {
+  if (metadata === null || metadata === undefined) {
     return { ...DEFAULT_PARTICIPANT_STATUS };
   }
 
-  try {
-    const parsed = JSON.parse(metadata);
-    const roleValue = parsed.role;
-    const micStatusValue = parsed.mic_status;
-    const displayStatusValue = parsed.display_status;
+  let parsedSource: Record<string, unknown> | null = null;
 
-    return {
-      ...DEFAULT_PARTICIPANT_STATUS,
-      micStatus: typeof micStatusValue === 'string' ? micStatusValue : DEFAULT_PARTICIPANT_STATUS.micStatus,
-      displayStatus: typeof displayStatusValue === 'string' ? displayStatusValue : DEFAULT_PARTICIPANT_STATUS.displayStatus,
-      role:
-        typeof roleValue === 'string'
-          ? roleValue
-          : typeof roleValue === 'number'
-          ? String(roleValue)
-          : DEFAULT_PARTICIPANT_STATUS.role,
-      roleName: typeof parsed.role_name === 'string' ? parsed.role_name : undefined,
-      joinTime: typeof parsed.join_time === 'string' ? parsed.join_time : undefined,
-      requestTime: typeof parsed.request_time === 'string' ? parsed.request_time : undefined,
-      approveTime: typeof parsed.approve_time === 'string' ? parsed.approve_time : undefined,
-      lastAction: typeof parsed.last_action === 'string' ? parsed.last_action : undefined,
-      operatorId: typeof parsed.operator_id === 'string' ? parsed.operator_id : undefined,
-      isDisabledUser:
-        parsed.isDisabledUser === true ||
-        parsed.isDisabledUser === 'true' ||
-        parsed.is_disabled_user === true ||
-        parsed.is_disabled_user === 'true',
-      raw: typeof parsed === 'object' && parsed ? (parsed as Record<string, unknown>) : undefined,
-    };
-  } catch (error) {
-    console.warn('parseParticipantMetadata fallback', error);
+  if (typeof metadata === 'string') {
+    const trimmed = metadata.trim();
+    if (!trimmed || trimmed === 'null' || trimmed === 'undefined') {
+      return { ...DEFAULT_PARTICIPANT_STATUS };
+    }
+
+    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+      try {
+        parsedSource = JSON.parse(trimmed) as Record<string, unknown>;
+      } catch (error) {
+        console.warn('parseParticipantMetadata fallback', error, { metadataSnippet: trimmed.slice(0, 80) });
+        return { ...DEFAULT_PARTICIPANT_STATUS };
+      }
+    } else {
+      console.warn('parseParticipantMetadata fallback: unsupported metadata format', { metadataSnippet: trimmed.slice(0, 80) });
+      return { ...DEFAULT_PARTICIPANT_STATUS };
+    }
+  } else if (typeof metadata === 'object') {
+    parsedSource = metadata as Record<string, unknown>;
+  }
+
+  if (!parsedSource) {
     return { ...DEFAULT_PARTICIPANT_STATUS };
   }
+
+  const roleValue = parsedSource.role;
+  const micStatusValue = parsedSource.mic_status;
+  const displayStatusValue = parsedSource.display_status;
+
+  return {
+    ...DEFAULT_PARTICIPANT_STATUS,
+    micStatus: typeof micStatusValue === 'string' ? micStatusValue : DEFAULT_PARTICIPANT_STATUS.micStatus,
+    displayStatus: typeof displayStatusValue === 'string' ? displayStatusValue : DEFAULT_PARTICIPANT_STATUS.displayStatus,
+    role:
+      typeof roleValue === 'string'
+        ? roleValue
+        : typeof roleValue === 'number'
+        ? String(roleValue)
+        : DEFAULT_PARTICIPANT_STATUS.role,
+    roleName: typeof parsedSource.role_name === 'string' ? parsedSource.role_name : undefined,
+    joinTime: typeof parsedSource.join_time === 'string' ? parsedSource.join_time : undefined,
+    requestTime: typeof parsedSource.request_time === 'string' ? parsedSource.request_time : undefined,
+    approveTime: typeof parsedSource.approve_time === 'string' ? parsedSource.approve_time : undefined,
+    lastAction: typeof parsedSource.last_action === 'string' ? parsedSource.last_action : undefined,
+    operatorId: typeof parsedSource.operator_id === 'string' ? parsedSource.operator_id : undefined,
+    isDisabledUser:
+      parsedSource.isDisabledUser === true ||
+      parsedSource.isDisabledUser === 'true' ||
+      parsedSource.is_disabled_user === true ||
+      parsedSource.is_disabled_user === 'true',
+    raw: parsedSource,
+  };
 }
+
 
 export function isHost(metadata: TokenMetadata | null): boolean {
   return metadata?.role === 2 || metadata?.role === 3;
@@ -112,23 +136,23 @@ export function getRoleDisplayName(metadata: TokenMetadata | null): string {
   }
 }
 
-export function shouldShowInMicList(metadata?: string | null): boolean {
+export function shouldShowInMicList(metadata?: ParticipantMetadataSource): boolean {
   return parseParticipantMetadata(metadata).displayStatus === 'visible';
 }
 
-export function isRequestingMic(metadata?: string | null): boolean {
+export function isRequestingMic(metadata?: ParticipantMetadataSource): boolean {
   return parseParticipantMetadata(metadata).micStatus === 'requesting';
 }
 
-export function isOnMic(metadata?: string | null): boolean {
+export function isOnMic(metadata?: ParticipantMetadataSource): boolean {
   return parseParticipantMetadata(metadata).micStatus === 'on_mic';
 }
 
-export function isMuted(metadata?: string | null): boolean {
+export function isMuted(metadata?: ParticipantMetadataSource): boolean {
   return parseParticipantMetadata(metadata).micStatus === 'muted';
 }
 
-export function canSpeak(metadata?: string | null): boolean {
+export function canSpeak(metadata?: ParticipantMetadataSource): boolean {
   const status = parseParticipantMetadata(metadata);
   const role = parseInt(status.role || '1', 10);
   if (status.isDisabledUser) {
@@ -137,17 +161,17 @@ export function canSpeak(metadata?: string | null): boolean {
   return role >= 2 || status.micStatus === 'on_mic';
 }
 
-export function isHostOrAdmin(metadata?: string | null): boolean {
+export function isHostOrAdmin(metadata?: ParticipantMetadataSource): boolean {
   const status = parseParticipantMetadata(metadata);
   const role = parseInt(status.role || '1', 10);
   return role >= 2;
 }
 
-export function isUserDisabled(metadata?: string | null): boolean {
+export function isUserDisabled(metadata?: ParticipantMetadataSource): boolean {
   return parseParticipantMetadata(metadata).isDisabledUser;
 }
 
-export function canRequestMic(metadata?: string | null): boolean {
+export function canRequestMic(metadata?: ParticipantMetadataSource): boolean {
   const status = parseParticipantMetadata(metadata);
   const role = parseInt(status.role || '1', 10);
   if (status.isDisabledUser || role >= 2) {
@@ -156,7 +180,7 @@ export function canRequestMic(metadata?: string | null): boolean {
   return true;
 }
 
-export function getMicStatusText(metadata?: string | null): string {
+export function getMicStatusText(metadata?: ParticipantMetadataSource): string {
   const status = parseParticipantMetadata(metadata);
   if (status.isDisabledUser) return '已禁用';
   switch (status.micStatus) {
@@ -172,7 +196,7 @@ export function getMicStatusText(metadata?: string | null): string {
   }
 }
 
-export function getRoleText(metadata?: string | null): string {
+export function getRoleText(metadata?: ParticipantMetadataSource): string {
   const status = parseParticipantMetadata(metadata);
   const role = parseInt(status.role || '1', 10);
   switch (role) {
@@ -249,7 +273,7 @@ export function createParticipantMetadata(
 }
 
 export function updateParticipantMetadata(
-  currentMetadata: string | null,
+  currentMetadata: ParticipantMetadataSource,
   updates: Partial<{
     role: number;
     mic_status: string;
@@ -261,17 +285,20 @@ export function updateParticipantMetadata(
   }>
 ): string {
   const current = parseParticipantMetadata(currentMetadata);
-  const updated = {
-    ...current.raw,
+  const base: Record<string, unknown> = {
+    ...(current.raw ?? {}),
     ...updates,
   };
 
   if (updates.role !== undefined) {
-    updated.role = updates.role.toString();
-    updated.role_name = getRoleNameByNumber(updates.role);
+    return JSON.stringify({
+      ...base,
+      role: updates.role.toString(),
+      role_name: getRoleNameByNumber(updates.role),
+    });
   }
 
-  return JSON.stringify(updated);
+  return JSON.stringify(base);
 }
 
 export function getRoleNameByNumber(role: number): string {
@@ -291,7 +318,7 @@ export function getCurrentUserRole(): number {
   return getCurrentUserRoleFromContext();
 }
 
-export function canCurrentUserControlParticipant(targetMetadata?: string | null): boolean {
+export function canCurrentUserControlParticipant(targetMetadata?: ParticipantMetadataSource): boolean {
   const currentRole = getCurrentUserRole();
   const targetRole = parseInt(parseParticipantMetadata(targetMetadata).role || '1', 10);
 
@@ -301,7 +328,7 @@ export function canCurrentUserControlParticipant(targetMetadata?: string | null)
   return false;
 }
 
-export function canCurrentUserKickFromMic(targetMetadata?: string | null): boolean {
+export function canCurrentUserKickFromMic(targetMetadata?: ParticipantMetadataSource): boolean {
   const currentRole = getCurrentUserRole();
   const targetStatus = parseParticipantMetadata(targetMetadata);
   const targetRole = parseInt(targetStatus.role || '1', 10);
@@ -313,11 +340,11 @@ export function canCurrentUserKickFromMic(targetMetadata?: string | null): boole
   return false;
 }
 
-export function canCurrentUserMuteParticipant(targetMetadata?: string | null): boolean {
+export function canCurrentUserMuteParticipant(targetMetadata?: ParticipantMetadataSource): boolean {
   return canCurrentUserControlParticipant(targetMetadata);
 }
 
-export function canCurrentUserApproveRequest(targetMetadata?: string | null): boolean {
+export function canCurrentUserApproveRequest(targetMetadata?: ParticipantMetadataSource): boolean {
   const currentRole = getCurrentUserRole();
   const targetStatus = parseParticipantMetadata(targetMetadata);
 

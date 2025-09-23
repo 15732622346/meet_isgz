@@ -41,7 +41,7 @@ interface UserAuthFormProps {
 
 export function UserAuthForm({ onLoginSuccess, onGuestMode, roomName }: UserAuthFormProps) {
   // UserContext集成
-  const { setUserInfo } = useUser();
+  const { setUserInfo, setInviteCode } = useUser();
 
   const [isLogin, setIsLogin] = React.useState(true); // true=登录, false=注册
   const [formData, setFormData] = React.useState({
@@ -172,6 +172,7 @@ export function UserAuthForm({ onLoginSuccess, onGuestMode, roomName }: UserAuth
       };
 
       setUserInfo(userInfo);
+      setInviteCode(formData.inviteCode.trim());
       console.log('✅ 用户信息已保存到UserContext:', userInfo);
 
       onLoginSuccess({
@@ -372,6 +373,7 @@ export function UserAuthForm({ onLoginSuccess, onGuestMode, roomName }: UserAuth
       };
 
       setUserInfo(userInfo);
+      setInviteCode(formData.inviteCode.trim());
       console.log('✅ 强制登录成功，用户信息已保存到UserContext:', userInfo);
 
       onLoginSuccess({

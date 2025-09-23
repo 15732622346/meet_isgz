@@ -15,7 +15,9 @@ interface UserInfo {
   access_expires_at?: number;
   refresh_expires_at?: number;
   livekit_token?: string;
+  invite_code?: string;
 }
+
 
 interface UserContextValue {
   userInfo: UserInfo | null;
@@ -24,6 +26,8 @@ interface UserContextValue {
   resolveGatewayToken: () => Promise<string>;
   performLogout: () => Promise<void>;
   clearUserInfo: () => void;
+  inviteCode: string | null;
+  setInviteCode: (code: string | null) => void;
   isLoggedIn: boolean;
   isGuest: boolean;
 }
@@ -36,10 +40,29 @@ interface UserProviderProps {
 
 export function UserProvider({ children }: UserProviderProps) {
   const [userInfo, setUserInfoState] = useState<UserInfo | null>(null);
+  const [inviteCode, setInviteCodeState] = useState<string | null>(null);
   const refreshPromiseRef = useRef<Promise<string> | null>(null);
+
+  const updateInviteCode = (code: string | null) => {
+    const normalized = code ?? null;
+    setInviteCodeState(normalized);
+    setUserInfoState(prev => {
+      if (!prev) {
+        return prev;
+      }
+      if ((prev.invite_code ?? null) === normalized) {
+        return prev;
+      }
+      return {
+        ...prev,
+        invite_code: normalized ?? undefined,
+      };
+    });
+  };
 
   const setUserInfo = (info: UserInfo | null) => {
     setUserInfoState(info);
+    setInviteCodeState(info?.invite_code ?? null);
     // 同步角色信息到全局缓存（供非React环境使用）
     if (typeof window !== 'undefined') {
       (window as any).__USER_ROLE_CACHE__ = info?.user_roles ?? 1;
@@ -142,6 +165,7 @@ export function UserProvider({ children }: UserProviderProps) {
 
   const clearUserInfo = () => {
     setUserInfo(null);
+    setInviteCodeState(null);
     // 清理本地存储
     if (typeof window !== 'undefined') {
       localStorage.removeItem('livekit_user');
@@ -184,6 +208,8 @@ export function UserProvider({ children }: UserProviderProps) {
     resolveGatewayToken,
     performLogout,
     clearUserInfo,
+    inviteCode,
+    setInviteCode: updateInviteCode,
     isLoggedIn: Boolean(userInfo),
     isGuest: userInfo?.user_roles === 0,
   };

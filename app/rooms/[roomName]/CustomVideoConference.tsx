@@ -109,8 +109,8 @@ export function CustomVideoConference({
   const [chatGlobalMute, setChatGlobalMute] = React.useState(true); // 修改为true，默认不能发言
   const [micGlobalMute, setMicGlobalMute] = React.useState(false);
   // 移除“主持人在场”判断逻辑
-  // 添加isUserDisabled状态来追踪用户禁用状态
-  const [isUserDisabled, setIsUserDisabled] = React.useState(false);
+  // 添加isLocalUserDisabled状态来追踪用户禁用状态
+  const [isLocalUserDisabled, setIsLocalUserDisabled] = React.useState(false);
   // 🎯 强制重渲染状态，用于attributesChanged事件触发UI更新
   const [forceUpdateTrigger, setForceUpdateTrigger] = React.useState(0);
   // 🔍 调试状态
@@ -136,7 +136,7 @@ export function CustomVideoConference({
   }, []);
 
   // UserContext集成
-  const { userInfo, resolveGatewayToken, getCurrentUserRole } = useUserContext();
+  const { userInfo, resolveGatewayToken, getCurrentUserRole, inviteCode } = useUserContext();
 
   const participants = useParticipants();
   const { localParticipant } = useLocalParticipant();
@@ -159,6 +159,10 @@ export function CustomVideoConference({
       console.log('[room] skip fetching room detail: missing room name');
       return;
     }
+    if (!inviteCode) {
+      console.warn('[room] skip fetching room detail: missing invite code');
+      return;
+    }
     let cancelled = false;
     const fetchRoomDetails = async () => {
       try {
@@ -166,6 +170,10 @@ export function CustomVideoConference({
         if (userToken) {
           headers.Authorization = `Bearer ${userToken}`;
         }
+        const params: Record<string, string> = {
+          room_id: roomInfo.name,
+          invite_code: inviteCode,
+        };
         const response = await callGatewayApi<{
           max_mic_slots?: number | string;
           room_name?: string;
@@ -173,7 +181,7 @@ export function CustomVideoConference({
           chat_global_mute?: boolean | string | number;
         }>(
           '/api/v1/rooms/detail',
-          { room_id: roomInfo.name },
+          params,
           { method: 'GET', credentials: 'include', headers },
         );
         if (cancelled || !response?.success || !response.data) {
@@ -212,7 +220,7 @@ export function CustomVideoConference({
     return () => {
       cancelled = true;
     };
-  }, [roomInfo.name, userToken]);
+  }, [roomInfo.name, userToken, inviteCode]);
   // 🎯 新增：监听房间元数据变化，更新roomDetails
   React.useEffect(() => {
     if (!roomCtx) return;
@@ -1046,11 +1054,11 @@ export function CustomVideoConference({
         <div className="control-buttons">
           {/* 麦克风按钮 */}
           <button 
-            className={`control-btn mic-btn ${isUserDisabled || localParticipant?.attributes?.isDisabledUser === 'true' ? 'disabled' : ''}`}
-            disabled={isUserDisabled || localParticipant?.attributes?.isDisabledUser === 'true'}
-            title={isUserDisabled || localParticipant?.attributes?.isDisabledUser === 'true' ? "您已被禁用，无法使用麦克风" : "麦克风"}
+            className={`control-btn mic-btn ${isLocalUserDisabled || localParticipant?.attributes?.isDisabledUser === 'true' ? 'disabled' : ''}`}
+            disabled={isLocalUserDisabled || localParticipant?.attributes?.isDisabledUser === 'true'}
+            title={isLocalUserDisabled || localParticipant?.attributes?.isDisabledUser === 'true' ? "您已被禁用，无法使用麦克风" : "麦克风"}
             onClick={() => {
-              if (isUserDisabled || localParticipant?.attributes?.isDisabledUser === 'true') {
+              if (isLocalUserDisabled || localParticipant?.attributes?.isDisabledUser === 'true') {
                 alert('您已被禁用，无法使用麦克风');
                 return;
               }
@@ -1060,14 +1068,14 @@ export function CustomVideoConference({
               }
             }}
             style={{
-              opacity: isUserDisabled || localParticipant?.attributes?.isDisabledUser === 'true' ? 0.5 : 1,
-              cursor: isUserDisabled || localParticipant?.attributes?.isDisabledUser === 'true' ? 'not-allowed' : 'pointer',
+              opacity: isLocalUserDisabled || localParticipant?.attributes?.isDisabledUser === 'true' ? 0.5 : 1,
+              cursor: isLocalUserDisabled || localParticipant?.attributes?.isDisabledUser === 'true' ? 'not-allowed' : 'pointer',
               position: 'relative'
             }}
           >
-            {isUserDisabled || localParticipant?.attributes?.isDisabledUser === 'true' ? '🚫 麦克风已禁用' : '🎤 麦克风'}
+            {isLocalUserDisabled || localParticipant?.attributes?.isDisabledUser === 'true' ? '🚫 麦克风已禁用' : '🎤 麦克风'}
             {/* 添加一个透明覆盖层，完全阻止点击 */}
-            {(isUserDisabled || localParticipant?.attributes?.isDisabledUser === 'true') && (
+            {(isLocalUserDisabled || localParticipant?.attributes?.isDisabledUser === 'true') && (
               <div style={{
                 position: 'absolute',
                 top: 0,
@@ -1212,7 +1220,7 @@ export function CustomVideoConference({
         </button>
       </div>
     </div>
-  ), [roomInfo.name, widgetState.showSettings, widgetState.showHostPanel, handleLeaveRoom, userRole, userId, userName, isScreenSharing, toggleScreenShare, toggleHostPanel, localParticipant, isUserDisabled]);
+  ), [roomInfo.name, widgetState.showSettings, widgetState.showHostPanel, handleLeaveRoom, userRole, userId, userName, isScreenSharing, toggleScreenShare, toggleHostPanel, localParticipant, isLocalUserDisabled]);
   const handleDataReceived = React.useCallback((payload: Uint8Array) => {
     try {
       const text = new TextDecoder().decode(payload).trim();
@@ -1483,14 +1491,14 @@ export function CustomVideoConference({
   // 初始化时检查用户是否被禁用
   React.useEffect(() => {
     if (localParticipant?.attributes?.isDisabledUser === 'true') {
-      setIsUserDisabled(true);
+      setIsLocalUserDisabled(true);
     }
   }, [localParticipant]);
   // 修复localParticipant的属性监听
   React.useEffect(() => {
     if (!localParticipant) return;
     const handleAttributesChanged = () => {
-      const oldDisabledState = isUserDisabled;
+      const oldDisabledState = isLocalUserDisabled;
       const newDisabledState = localParticipant.attributes?.isDisabledUser === 'true';
       const timestamp = new Date().toLocaleTimeString();
       // 增强调试日志
@@ -1518,12 +1526,12 @@ export function CustomVideoConference({
       // 检查禁用状态并更新
       if (localParticipant.attributes?.isDisabledUser === 'true') {
         console.log('🚫 用户被禁用状态变化: true');
-        setIsUserDisabled(true);
+        setIsLocalUserDisabled(true);
         // 添加到调试面板
         setDebugInfo(prev => prev + `\n[${timestamp}] 🚫 用户被禁用!\n`);
       } else {
         console.log('✅ 用户禁用状态变化: false');
-        setIsUserDisabled(false);
+        setIsLocalUserDisabled(false);
         // 添加到调试面板
         setDebugInfo(prev => prev + `\n[${timestamp}] ✅ 用户禁用状态解除\n`);
       }
@@ -1533,14 +1541,14 @@ export function CustomVideoConference({
     setDebugInfo(prev => prev + 
       `\n[${timestamp}] 📌 初始禁用状态检测:\n` +
       `- isDisabledUser: ${localParticipant.attributes?.isDisabledUser || '未设置'}\n` +
-      `- 当前状态变量: ${isUserDisabled ? 'true' : 'false'}\n` +
+      `- 当前状态变量: ${isLocalUserDisabled ? 'true' : 'false'}\n` +
       `---------------------------\n`
     );
     localParticipant.on('attributesChanged', handleAttributesChanged);
     return () => {
       localParticipant.off('attributesChanged', handleAttributesChanged);
     };
-  }, [localParticipant, isUserDisabled, setDebugInfo]);
+  }, [localParticipant, isLocalUserDisabled, setDebugInfo]);
   return (
     <LayoutContextProvider value={layoutContext}>
       <div className="lk-video-conference">
@@ -1882,7 +1890,7 @@ export function CustomVideoConference({
                   }}>
                     <div className="chat-form-container" style={{ width: '100%', position: 'relative' }}>
                       {/* 添加禁用用户的聊天输入框覆盖层 */}
-                      {(isUserDisabled || localParticipant?.attributes?.isDisabledUser === 'true') && (
+                      {(isLocalUserDisabled || localParticipant?.attributes?.isDisabledUser === 'true') && (
                         <div style={{
                           position: 'absolute',
                           top: 0,
@@ -2521,7 +2529,7 @@ function MicParticipantList({ currentUserRole, currentUserName, roomInfo, userTo
       padding: '8px'
     }}>
       <h4 style={{ color: '#fff', margin: '0 0 12px 0', fontSize: '14px' }}>
-        麦位列表 (${micListParticipants.length}/${maxMicSlots ?? "--"})
+        {`麦位列表 (${micListParticipants.length}/${maxMicSlots ?? "--"})`}
       </h4>
       {micListParticipants.length > 0 ? (
         <ParticipantLoop participants={micListParticipants}>

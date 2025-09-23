@@ -26,6 +26,7 @@ import { KeyboardShortcuts } from '@/lib/KeyboardShortcuts';
 import { RecordingIndicator } from '@/lib/RecordingIndicator';
 import { ConnectionDetails } from '@/lib/types';
 import { callGatewayApi, normalizeGatewayResponse } from '@/lib/api-client';
+import { useUserContext } from '@/contexts/UserContext';
 import type { AuthStatusResponse, RoomDetailRequest, RoomDetailResponse } from '@/types/api';
 import { LocalUserChoices, PreJoin, RoomContext } from '@livekit/components-react';
 import {
@@ -117,7 +118,8 @@ function PageClientImplInner(props: PageClientImplInnerProps) {
   const [mediaSupported, setMediaSupported] = React.useState(false);
   const [connectionDetails, setConnectionDetails] = React.useState<ConnectionDetails | undefined>(undefined);
   const [askInvite, setAskInvite] = React.useState(false);
-  const [inviteCode, setInviteCode] = React.useState('');
+  const { setInviteCode: storeInviteCode, inviteCode: storedInviteCode } = useUserContext();
+  const [inviteCodeInput, setInviteCodeInput] = React.useState(storedInviteCode ?? '');
   const [inviteSubmitting, setInviteSubmitting] = React.useState(false);
   const [showPermissionHelper, setShowPermissionHelper] = React.useState(false);
   const [permissionError, setPermissionError] = React.useState<string | null>(null);
@@ -268,12 +270,13 @@ function PageClientImplInner(props: PageClientImplInnerProps) {
   const handleGuestMode = React.useCallback(() => {
     setShowUserAuth(false);
     setAskInvite(true);
-    setInviteCode('');
+    setInviteCodeInput('');
     setJwtToken(undefined);
   }, []);
 
   const handleInviteSubmit = React.useCallback(async () => {
-    if (!inviteCode.trim()) {
+    const normalizedInvite = inviteCodeInput.trim();
+    if (!normalizedInvite) {
       alert('请输入邀请码');
       return;
     }
@@ -298,7 +301,7 @@ function PageClientImplInner(props: PageClientImplInnerProps) {
 
       const roomRequest: RoomDetailRequest = {
         room_id: props.roomName,
-        invite_code: inviteCode,
+        invite_code: normalizedInvite,
         user_name: guestName,
         user_jwt_token: authData.jwt_token || '',
       };
@@ -317,6 +320,8 @@ function PageClientImplInner(props: PageClientImplInnerProps) {
       }
 
       const data = roomResult.payload ?? (roomResponse as RoomDetailResponse);
+
+      storeInviteCode(normalizedInvite);
 
       const guestChoices: LocalUserChoices = {
         username: guestName,
@@ -357,7 +362,7 @@ function PageClientImplInner(props: PageClientImplInnerProps) {
         console.warn('游客模式 API 缺少房间信息', data);
       }
 
-      setInviteCode('');
+      setInviteCodeInput('');
       setAskInvite(false);
       setShowPermissionHelper(true);
     } catch (error) {
@@ -368,10 +373,10 @@ function PageClientImplInner(props: PageClientImplInnerProps) {
     } finally {
       setInviteSubmitting(false);
     }
-  }, [inviteCode, props.roomName, setRoomDataWithValidation]);
+  }, [inviteCodeInput, props.roomName, setRoomDataWithValidation, storeInviteCode]);
 
   const handleInviteCancel = React.useCallback(() => {
-    setInviteCode('');
+    setInviteCodeInput('');
     setAskInvite(false);
     setShowUserAuth(true);
     setJwtToken(undefined);
@@ -422,6 +427,8 @@ function PageClientImplInner(props: PageClientImplInnerProps) {
         }
 
         const data = roomResult.payload ?? (roomResponse as RoomDetailResponse);
+
+        storeInviteCode(invite.trim());
 
         const choices: LocalUserChoices = {
           username,
@@ -517,9 +524,9 @@ function PageClientImplInner(props: PageClientImplInnerProps) {
         />
       ) : askInvite ? (
         <InviteCodeForm
-          inviteCode={inviteCode}
+          inviteCode={inviteCodeInput}
           loading={inviteSubmitting}
-          onInviteCodeChange={setInviteCode}
+          onInviteCodeChange={setInviteCodeInput}
           onSubmit={handleInviteSubmit}
           onCancel={handleInviteCancel}
         />
