@@ -113,7 +113,7 @@ export function CustomVideoConference({
   }, []);
 
   // UserContext集成
-  const { userInfo, resolveGatewayToken, getCurrentUserRole, inviteCode } = useUserContext();
+  const { userInfo, resolveGatewayToken, getCurrentUserRole, inviteCode, performLogout, clearUserInfo } = useUserContext();
 
   const participants = useParticipants();
   const { localParticipant } = useLocalParticipant();
@@ -227,12 +227,34 @@ export function CustomVideoConference({
     }
   }, [roomCtx, userRole, chatGlobalMute, localParticipant]);
   const handleLeaveRoom = React.useCallback(() => {
-    if (confirm('确定要离开会议吗？')) {
-      roomCtx?.disconnect();
-      // 🎯 简单有效的解决方案：直接刷新页面回到房间登录页面
-      window.location.reload();
+    if (!confirm('确定要离开会议吗？')) {
+      return;
     }
-  }, [roomCtx]);
+
+    const logoutAndLeave = async () => {
+      try {
+        if (userInfo?.jwt_token) {
+          await performLogout();
+        } else {
+          clearUserInfo();
+        }
+      } catch (error) {
+        console.error('退出登录失败:', error);
+        clearUserInfo();
+      } finally {
+        try {
+          await roomCtx?.disconnect();
+        } catch (disconnectError) {
+          console.error('断开房间失败:', disconnectError);
+        }
+        window.location.reload();
+      }
+    };
+
+    logoutAndLeave().catch(error => {
+      console.error('处理退出流程时出现未捕获的错误:', error);
+    });
+  }, [performLogout, clearUserInfo, roomCtx, userInfo?.jwt_token]);
   // 麦克风管理函数 - 改为调用后台API
   const handleToggleMicMute = React.useCallback(async () => {
     if (!roomCtx || (userRole !== 2 && userRole !== 3)) return;
