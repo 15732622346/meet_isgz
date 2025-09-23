@@ -18,6 +18,7 @@ type RoomContextLike = {
 } | null;
 
 interface UseRoomManagementOptions {
+  initialRoomDetails?: RoomDetails | null;
   roomName?: string;
   inviteCode?: string;
   userToken?: string;
@@ -41,8 +42,9 @@ interface UseRoomManagementResult {
 }
 
 export function useRoomManagement({
+  initialRoomDetails,
   roomName,
-  inviteCode,
+  inviteCode: _inviteCode,
   userToken,
   roomCtx,
   participants,
@@ -51,97 +53,52 @@ export function useRoomManagement({
   hostUserId,
   userRole,
 }: UseRoomManagementOptions): UseRoomManagementResult {
-  const [roomDetails, setRoomDetails] = React.useState<RoomDetails | null>(null);
+  const [roomDetails, setRoomDetails] = React.useState<RoomDetails | null>(
+    initialRoomDetails ?? null,
+  );
   const [forceUpdateTrigger, setForceUpdateTrigger] = React.useState(0);
 
+  const initialRoomDetailsKey = React.useMemo(() => {
+    if (!initialRoomDetails) {
+      return null;
+    }
+    return JSON.stringify(initialRoomDetails);
+  }, [initialRoomDetails]);
+
   React.useEffect(() => {
-    if (!roomName || !inviteCode) {
+    if (!initialRoomDetails) {
       return;
     }
-    let cancelled = false;
-
-    const fetchRoomDetails = async () => {
-      try {
-        const headers: Record<string, string> = {};
-        if (userToken) {
-          headers.Authorization = `Bearer ${userToken}`;
-        }
-        const params = new URLSearchParams({
-          room_id: roomName,
-          invite_code: inviteCode,
-        });
-        const response = await fetch(`/api/v1/rooms/detail?${params.toString()}`, {
-          method: 'GET',
-          credentials: 'include',
-          headers,
-        });
-        if (!response.ok) {
-          return;
-        }
-        const payload = await response.json();
-        if (cancelled || !payload?.data) {
-          return;
-        }
-        const data = payload.data as {
-          max_mic_slots?: number | string;
-          room_name?: string;
-          room_state?: number;
-          chat_global_mute?: boolean | string | number;
-        };
-        const parsedMaxSlots = Number(data.max_mic_slots);
-        setRoomDetails(prev => {
-          const next: RoomDetails = { ...(prev ?? {}) };
-          if (Number.isFinite(parsedMaxSlots)) {
-            next.maxMicSlots = parsedMaxSlots;
-          }
-          if (typeof data.room_name === 'string' && data.room_name) {
-            next.roomName = data.room_name;
-          }
-          if (typeof data.room_state === 'number') {
-            next.roomState = data.room_state;
-          }
-          return Object.keys(next).length > 0 ? next : prev;
-        });
-        if (data.chat_global_mute !== undefined) {
-          const muteValue = data.chat_global_mute;
-          if (muteValue === true || muteValue === 'true' || muteValue === 1) {
-            setChatGlobalMute(true);
-          } else if (muteValue === false || muteValue === 'false' || muteValue === 0) {
-            setChatGlobalMute(false);
-          }
-        }
-      } catch (error) {
-        console.error('[room] fetch room detail error', error);
-      }
-    };
-
-    fetchRoomDetails();
-    return () => {
-      cancelled = true;
-    };
-  }, [roomName, inviteCode, userToken, setChatGlobalMute]);
+    setRoomDetails(prev => ({
+      ...prev,
+      ...initialRoomDetails,
+    }));
+  }, [initialRoomDetailsKey, initialRoomDetails]);
 
   React.useEffect(() => {
     if (!roomCtx || !roomName || typeof roomCtx.on !== 'function' || typeof roomCtx.off !== 'function') {
       return;
     }
+
     const handleMetadataChanged = () => {
       try {
-        if (!roomCtx.metadata) return;
+        if (!roomCtx.metadata) {
+          return;
+        }
         const metadata = JSON.parse(roomCtx.metadata);
         if (metadata && typeof metadata.maxMicSlots === 'number') {
           setRoomDetails(prev => {
-            if (!prev) {
-              return {
-                maxMicSlots: metadata.maxMicSlots,
-                roomName: roomName || '',
-                roomState: 1,
-              };
-            }
-            return {
-              ...prev,
+            const next: RoomDetails = {
+              ...(prev ?? {}),
               maxMicSlots: metadata.maxMicSlots,
             };
+            if (!next.roomName && roomName) {
+              next.roomName = roomName;
+            }
+            if (typeof metadata.roomState === 'number') {
+              next.roomState = metadata.roomState;
+            }
+            return next;
           });
         }
       } catch (error) {
@@ -259,13 +216,20 @@ export function useRoomManagement({
       try {
         const timestamp = new Date().toLocaleTimeString();
         const tokenDebugInfo =
-          ` ${timestamp} API调用开始\n` +
-          `  房间: ${roomName}\n` +
-          `  目标身份: ${participantIdentity}\n` +
-          `  属性: ${JSON.stringify(attributes)}\n` +
-          `  Token状态: ${userToken ? '已提供' : '未提供'}\n` +
-          `  Token长度: ${userToken?.length || 'N/A'}\n` +
-          `  认证方式: ${userToken ? 'JWT Token' : 'Session Cookie'}\n`;
+          ` ${timestamp} API调用开始
+` +
+          `  房间: ${roomName}
+` +
+          `  目标身份: ${participantIdentity}
+` +
+          `  属性: ${JSON.stringify(attributes)}
+` +
+          `  Token状态: ${userToken ? '已提供' : '未提供'}
+` +
+          `  Token长度: ${userToken?.length || 'N/A'}
+` +
+          `  认证方式: ${userToken ? 'JWT Token' : 'Session Cookie'}
+`;
         setDebugInfo(prev => prev + tokenDebugInfo);
 
         const headers: Record<string, string> = {
@@ -290,12 +254,18 @@ export function useRoomManagement({
         });
         const result = await response.json();
         if (result.success) {
-          setDebugInfo(prev => prev + `   API调用成功: ${JSON.stringify(result)}\n\n`);
+          setDebugInfo(prev => prev + `   API调用成功: ${JSON.stringify(result)}
+
+`);
         } else {
-          setDebugInfo(prev => prev + `   API调用失败: ${JSON.stringify(result)}\n\n`);
+          setDebugInfo(prev => prev + `   API调用失败: ${JSON.stringify(result)}
+
+`);
         }
       } catch (error) {
-        setDebugInfo(prev => prev + `   请求异常: ${String(error)}\n\n`);
+        setDebugInfo(prev => prev + `   请求异常: ${String(error)}
+
+`);
       }
     },
     [roomName, userToken, setDebugInfo],

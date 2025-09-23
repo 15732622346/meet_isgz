@@ -13,6 +13,7 @@ export interface CustomVideoConferenceProps {
   jwtToken?: string; // JWT token for API auth
   hostUserId?: number;
   roomName?: string;
+  initialRoomDetails?: RoomDetails | null;
 }
 
 

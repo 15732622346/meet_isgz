@@ -41,6 +41,7 @@ import {
 } from 'livekit-client';
 import { useSetupE2EE } from '@/lib/useSetupE2EE';
 import { CustomVideoConference } from './CustomVideoConference';
+import type { RoomDetails } from './types/conference-types';
 import { PermissionHelper } from './PermissionHelper';
 import { UserAuthForm } from './UserAuthForm';
 import { ErrorToast } from '../../../components/ErrorToast';
@@ -614,6 +615,17 @@ function VideoConferenceComponent(props: VideoConferenceComponentProps) {
   const [deviceError, setDeviceError] = React.useState<string | null>(null);
   const e2eeSetup = useSetupE2EE(undefined, {});
   const e2eeEnabled = e2eeSetup.isE2EEEnabled;
+
+  const initialRoomDetails = React.useMemo<RoomDetails | null>(() => {
+    if (!props.roomData) {
+      return null;
+    }
+    return {
+      maxMicSlots: props.roomData.maxMicSlots,
+      roomName: props.roomData.roomName,
+      roomState: props.roomData.roomState,
+    };
+  }, [props.roomData]);
   const e2eeSetupComplete = e2eeSetup.isSetupComplete;
 
   const roomOptions = React.useMemo((): RoomOptions => {
@@ -733,6 +745,7 @@ function VideoConferenceComponent(props: VideoConferenceComponentProps) {
           jwtToken={props.jwtToken}
           roomName={props.roomName ?? props.roomData?.roomName ?? props.connectionDetails.roomName}
           hostUserId={props.roomData?.hostUserId}
+          initialRoomDetails={initialRoomDetails}
         />
         <DebugMode />
         <RecordingIndicator />

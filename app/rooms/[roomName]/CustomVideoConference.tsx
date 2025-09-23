@@ -49,7 +49,6 @@ import { useUserContext } from '@/contexts/UserContext';
 import {
   shouldShowInMicList,
   isRequestingMic,
-  isOnMic,
   isMuted,
   canSpeak,
   isHostOrAdmin,
@@ -73,6 +72,7 @@ export function CustomVideoConference({
   jwtToken,
   roomName,
   hostUserId,
+  initialRoomDetails,
 }: CustomVideoConferenceProps) {
   // 🎯 版本标识 - LiveKit原生机制重构版本
   // 🎯 版本验证弹窗已移除
@@ -134,6 +134,7 @@ export function CustomVideoConference({
     participantRolesInfo,
     getParticipantRole,
   } = useRoomManagement({
+    initialRoomDetails,
     roomName: roomInfo.name,
     inviteCode,
     userToken,
@@ -144,6 +145,18 @@ export function CustomVideoConference({
     hostUserId,
     userRole,
   });
+  const maxMicSlots = roomDetails?.maxMicSlots;
+  const maxMicSlotsLabel = maxMicSlots !== undefined ? String(maxMicSlots) : '--';
+  const micListCount = React.useMemo(() => {
+    return participants.filter(participant =>
+      shouldShowInMicList(getParticipantMetadataSource(participant)),
+    ).length;
+  }, [participants]);
+  const requestingMicCount = React.useMemo(() => {
+    return participants.filter(participant =>
+      isRequestingMic(getParticipantMetadataSource(participant)),
+    ).length;
+  }, [participants]);
   const widgetUpdate = React.useCallback((state: BaseWidgetState) => {
     setWidgetState(prevState => ({
       ...prevState,
@@ -723,7 +736,9 @@ export function CustomVideoConference({
             }}
             title={isUserDisabled(localParticipant?.metadata) ? "您已被禁用，无法申请上麦" : "申请上麦"}
           >
-            {isUserDisabled(localParticipant?.metadata) ? '🚫 已禁用' : '🙋‍♂️ 申请上麦'}
+            {isUserDisabled(localParticipant?.metadata)
+              ? '\U0001f6ab \u5df2\u7981\u7528'
+              : `\U0001f64b\u200d\u2642\ufe0f \u7533\u8bf7\u4e0a\u9ea6 (${requestingMicCount}/${maxMicSlotsLabel})`}
             {/* 添加一个透明覆盖层，完全阻止点击 */}
             {isUserDisabled(localParticipant?.metadata) && (
               <div style={{
@@ -1257,7 +1272,7 @@ export function CustomVideoConference({
                 }}>
                                   <div className="participants-header">
                   <span className="participants-title">
-                    麦位上限 {roomDetails?.maxMicSlots ?? "--"}
+                    麦位上限 ({micListCount}/{maxMicSlotsLabel})
                   </span>
                 </div>
                   <div className="sidebar-controls">
