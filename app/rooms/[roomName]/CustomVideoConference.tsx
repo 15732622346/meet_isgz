@@ -1167,7 +1167,7 @@ export function CustomVideoConference({
                 const token = await resolveGatewayToken();
 
                 // 调用后端API申请上麦
-                const response = await callGatewayApi('/api/v1/participants/request-microphone', {
+                const rawResponse = await callGatewayApi('/api/v1/participants/request-microphone', {
                   room_id: roomInfo.name,
                   participant_identity: localParticipant.identity,
                   user_id: userInfo.uid,
@@ -1179,11 +1179,13 @@ export function CustomVideoConference({
                   }
                 });
 
-                if (response.success) {
+                const { success, message } = normalizeGatewayResponse(rawResponse);
+
+                if (success) {
                   console.log('✅ 申请上麦成功 - 后端已处理');
                   alert('✅ 申请成功！等待主持人批准');
                 } else {
-                  throw new Error(response.message || '申请失败');
+                  throw new Error(message || '申请失败');
                 }
               } catch (error) {
                 console.error('❌ 申请上麦失败:', error);
@@ -1386,13 +1388,21 @@ export function CustomVideoConference({
 
       // 获取Gateway token
       const token = await resolveGatewayToken();
+      const hostUid = userInfo?.uid;
+      if (!hostUid) {
+        throw new Error('缺少主持人 UID，无法执行踢麦');
+      }
+      const targetUid = extractParticipantUid(participant);
+      if (!targetUid) {
+        throw new Error('缺少参与者 UID，无法执行踢麦');
+      }
 
       // 调用Gateway API踢下麦位
       const response = await callGatewayApi('/api/v1/participants/kick-mic', {
         room_id: roomInfo?.name,
-        participant_identity: participant.identity,
-        operator_id: userInfo?.uid,
-        action: 'kick_from_mic',
+        host_user_id: hostUid,
+        user_uid: targetUid,
+        action: 'kick_mic',
         kick_time: new Date().toISOString(),
       }, {
         method: 'POST',
@@ -1430,13 +1440,21 @@ export function CustomVideoConference({
 
       // 获取Gateway token
       const token = await resolveGatewayToken();
+      const hostUid = userInfo?.uid;
+      if (!hostUid) {
+        throw new Error('缺少主持人 UID，无法执行禁麦');
+      }
+      const targetUid = extractParticipantUid(participant);
+      if (!targetUid) {
+        throw new Error('缺少参与者 UID，无法执行禁麦');
+      }
 
       // 调用Gateway API禁麦
       const response = await callGatewayApi('/api/v1/participants/batch-set-microphone', {
         room_id: roomInfo?.name,
-        participant_identity: participant.identity,
-        operator_id: userInfo?.uid,
-        action: 'mute_participant',
+        host_user_id: hostUid,
+        user_uids: [targetUid],
+        action: 'mute',
         mute_status: true,
         mute_time: new Date().toISOString(),
       }, {
@@ -1475,13 +1493,21 @@ export function CustomVideoConference({
 
       // 获取Gateway token
       const token = await resolveGatewayToken();
+      const hostUid = userInfo?.uid;
+      if (!hostUid) {
+        throw new Error('缺少主持人 UID，无法执行解除禁麦');
+      }
+      const targetUid = extractParticipantUid(participant);
+      if (!targetUid) {
+        throw new Error('缺少参与者 UID，无法执行解除禁麦');
+      }
 
       // 调用Gateway API解除禁麦
       const response = await callGatewayApi('/api/v1/participants/batch-set-microphone', {
         room_id: roomInfo?.name,
-        participant_identity: participant.identity,
-        operator_id: userInfo?.uid,
-        action: 'unmute_participant',
+        host_user_id: hostUid,
+        user_uids: [targetUid],
+        action: 'unmute',
         mute_status: false,
         unmute_time: new Date().toISOString(),
       }, {
@@ -2684,10 +2710,8 @@ function MicParticipantTile({ currentUserRole, onApproveMic, userToken, setDebug
       let endpoint = '';
       let payload: any = {
         room_id: room.name,
-        participant_identity: participant.identity,
-        operator_id: hostUid,
         host_user_id: hostUid,
-        user_uid: targetUid,
+        participant_identity: participant.identity,
         ...additionalData
       };
 
@@ -2701,30 +2725,34 @@ function MicParticipantTile({ currentUserRole, onApproveMic, userToken, setDebug
             publish_audio: true,
             publish_video: false,
             approve_time: new Date().toISOString(),
+            user_uid: targetUid,
           };
           break;
-        case 'kick_from_mic':
+        case 'kick_mic':
           endpoint = '/api/v1/participants/kick-mic';
           payload = {
             ...payload,
-            action: 'kick_from_mic',
+            action: 'kick_mic',
+            user_uid: targetUid,
             kick_time: new Date().toISOString(),
           };
           break;
-        case 'mute_participant':
+        case 'mute':
           endpoint = '/api/v1/participants/batch-set-microphone';
           payload = {
             ...payload,
-            action: 'mute_participant',
+            action: 'mute',
+            user_uids: [targetUid],
             mute_status: true,
             mute_time: new Date().toISOString(),
           };
           break;
-        case 'unmute_participant':
+        case 'unmute':
           endpoint = '/api/v1/participants/batch-set-microphone';
           payload = {
             ...payload,
-            action: 'unmute_participant',
+            action: 'unmute',
+            user_uids: [targetUid],
             mute_status: false,
             unmute_time: new Date().toISOString(),
           };
@@ -2744,9 +2772,9 @@ function MicParticipantTile({ currentUserRole, onApproveMic, userToken, setDebug
       if (response.success) {
         console.log(`✅ ${action} 操作成功: ${participant.name}`);
         // 🎯 添加成功提示
-        const actionText = action === 'mute_participant' ? '禁麦' :
-                          action === 'unmute_participant' ? '解除禁麦' :
-                          action === 'kick_from_mic' ? '踢下麦位' :
+        const actionText = action === 'mute' ? '禁麦' :
+                          action === 'unmute' ? '解除禁麦' :
+                          action === 'kick_mic' ? '踢下麦位' :
                           action === 'approve_mic' ? '批准上麦' : action;
         alert(`✅ 操作成功：${participant.name} ${actionText}成功`);
         setShowControlMenu(false);
@@ -2843,13 +2871,13 @@ function MicParticipantTile({ currentUserRole, onApproveMic, userToken, setDebug
     callControlAPI('approve_mic');
   };
   const handleKickFromMic = () => {
-    callControlAPI('kick_from_mic');
+    callControlAPI('kick_mic');
   };
   const handleMuteMic = () => {
-    callControlAPI('mute_participant');
+    callControlAPI('mute');
   };
   const handleUnmuteMic = () => {
-    callControlAPI('unmute_participant');
+    callControlAPI('unmute');
   };
   // 🎯 点击外部关闭菜单
   React.useEffect(() => {
