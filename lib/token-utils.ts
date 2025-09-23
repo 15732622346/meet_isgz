@@ -1,6 +1,85 @@
 import { Participant, Track } from 'livekit-client';
 import { getCurrentUserRoleFromContext } from '@/contexts/UserContext';
 
+type JsonRecord = Record<string, unknown>;
+
+const decodeBase64Url = (value: string): string => {
+  const normalized = value.replace(/-/g, '+').replace(/_/g, '/');
+  const paddingLength = normalized.length % 4 === 0 ? 0 : 4 - (normalized.length % 4);
+  const padded = normalized + '='.repeat(paddingLength);
+
+  const decodeWithAtob = () => {
+    if (typeof globalThis.atob !== 'function') {
+      return undefined;
+    }
+    const binary = globalThis.atob(padded);
+    if (typeof TextDecoder === 'function') {
+      const bytes = Uint8Array.from(binary, char => char.charCodeAt(0));
+      return new TextDecoder().decode(bytes);
+    }
+    return binary;
+  };
+
+  try {
+    const decoded = decodeWithAtob();
+    if (decoded !== undefined) {
+      return decoded;
+    }
+  } catch (error) {
+    console.warn('Failed to decode JWT with atob, falling back to Buffer-like decoder', error);
+  }
+
+  const maybeBuffer = (globalThis as any)?.Buffer;
+  if (maybeBuffer) {
+    const buffer = maybeBuffer.from(padded, 'base64');
+    if (buffer instanceof Uint8Array) {
+      if (typeof TextDecoder === 'function') {
+        return new TextDecoder().decode(buffer);
+      }
+      let result = '';
+      for (const byte of buffer) {
+        result += String.fromCharCode(byte);
+      }
+      return result;
+    }
+    if (buffer && typeof buffer.toString === 'function') {
+      return buffer.toString('utf8');
+    }
+  }
+
+  throw new Error('No base64 decoder available in current environment');
+};
+
+export const decodeJwtPayload = <T extends JsonRecord = JsonRecord>(token?: string): T | null => {
+  if (!token) {
+    return null;
+  }
+
+  const parts = token.split('.');
+  if (parts.length < 2) {
+    return null;
+  }
+
+  try {
+    const payloadSegment = parts[1];
+    const jsonString = decodeBase64Url(payloadSegment);
+    return JSON.parse(jsonString) as T;
+  } catch (error) {
+    console.error('Failed to decode JWT payload:', error);
+    return null;
+  }
+};
+
+export const getJwtExpiry = (token?: string): number | undefined => {
+  const payload = decodeJwtPayload<{ exp?: number }>(token);
+  if (!payload || typeof payload.exp !== 'number') {
+    return undefined;
+  }
+
+  const expMs = payload.exp * 1000;
+  return Number.isFinite(expMs) && expMs > 0 ? expMs : undefined;
+};
+
 export interface TokenMetadata {
   role: number;
   role_name: 'admin' | 'host' | 'student';

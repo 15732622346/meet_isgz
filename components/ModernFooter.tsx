@@ -229,11 +229,6 @@ export function ModernFooter({
       return;
     }
 
-    if (!participantState.micStats.hasHost) {
-      alert('请等待主持人进入房间后再申请上麦');
-      return;
-    }
-
     if (!participantState.micStats.hasAvailableSlots) {
       alert(`麦位已满！当前麦位列表已占用 ${participantState.micStats.micListCount}/${maxMicSlotsLabel}，请稍候再试。`);
       return;
@@ -405,21 +400,19 @@ export function ModernFooter({
         {(participantState.isGuest || participantState.isRegularUser) && (
           <button
             className={`control-btn request-mic ${isRequestingMic ? 'requesting' : ''} ${participantState.isGuest ? 'guest-restricted' : ''} ${
-              (!participantState.micStats.hasHost || !participantState.micStats.hasAvailableSlots || participantState.isDisabledUser) ? 'disabled' : ''
+              (!participantState.micStats.hasAvailableSlots || participantState.isDisabledUser) ? 'disabled' : ''
             } ${micRequestLoading ? 'loading' : ''}`}
             onClick={handleMicRequest}
             disabled={
               micRequestLoading ||
-              (!participantState.isGuest && (!participantState.micStats.hasHost || !participantState.micStats.hasAvailableSlots || participantState.isDisabledUser))
+              (!participantState.isGuest && (!participantState.micStats.hasAvailableSlots || participantState.isDisabledUser))
             }
             title={
               participantState.isDisabledUser
                 ? '您已被禁用，无法申请上麦'
                 : participantState.isGuest
                   ? '游客需要注册为会员'
-                  : !participantState.micStats.hasHost
-                    ? '等待主持人进入后可申请上麦'
-                    : !participantState.micStats.hasAvailableSlots
+                  : !participantState.micStats.hasAvailableSlots
                       ? `麦位已满 (${participantState.micStats.micListCount}/${maxMicSlotsLabel})`
                       : participantState.micStatus === 'on_mic'
                         ? '您已经在麦位上了'
@@ -437,9 +430,7 @@ export function ModernFooter({
                   ? '申请中...'
                   : participantState.micStatus === 'on_mic'
                     ? '已在麦位'
-                    : !participantState.micStats.hasHost
-                      ? '等待主持人'
-                      : !participantState.micStats.hasAvailableSlots
+                    : !participantState.micStats.hasAvailableSlots
                         ? `麦位已满 (${participantState.micStats.micListCount}/${maxMicSlotsLabel})`
                         : `申请上麦 (${participantState.micStats.micListCount}/${maxMicSlotsLabel})`}
             </span>

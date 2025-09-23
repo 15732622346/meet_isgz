@@ -4,6 +4,7 @@ import React from 'react';
 import { API_CONFIG, getApiUrl } from '@/lib/config';
 import { callGatewayApi, normalizeGatewayResponse } from '@/lib/api-client';
 import { useUser } from '@/contexts/UserContext';
+import { getJwtExpiry } from '@/lib/token-utils';
 import type {
   AuthLoginRequest,
   AuthLoginResponse,
@@ -218,6 +219,11 @@ export function UserAuthForm({ onLoginSuccess, onGuestMode, roomName }: UserAuth
         now,
       );
 
+      const resolvedAccessExpiresAt =
+        accessExpiresAt ?? getJwtExpiry(tokens?.access_token || jwtToken);
+      const resolvedRefreshExpiresAt =
+        refreshExpiresAt ?? getJwtExpiry(tokens?.refresh_token);
+
       const userInfo = {
         uid: loginData?.uid ?? loginData?.user_id ?? loginData?.id ?? 0,
         user_name: formData.username,
@@ -227,8 +233,8 @@ export function UserAuthForm({ onLoginSuccess, onGuestMode, roomName }: UserAuth
         jwt_token: jwtToken,
         access_token: tokens?.access_token || jwtToken,
         refresh_token: tokens?.refresh_token,
-        access_expires_at: accessExpiresAt,
-        refresh_expires_at: refreshExpiresAt,
+        access_expires_at: resolvedAccessExpiresAt,
+        refresh_expires_at: resolvedRefreshExpiresAt,
         livekit_token: liveKitToken,
       };
 
@@ -432,6 +438,11 @@ export function UserAuthForm({ onLoginSuccess, onGuestMode, roomName }: UserAuth
         now,
       );
 
+      const resolvedAccessExpiresAt =
+        accessExpiresAt ?? getJwtExpiry(tokens?.access_token || jwtToken);
+      const resolvedRefreshExpiresAt =
+        refreshExpiresAt ?? getJwtExpiry(tokens?.refresh_token);
+
       const userInfo = {
         uid: loginData?.uid ?? loginData?.user_id ?? loginData?.id ?? 0,
         user_name: formData.username,
@@ -441,8 +452,8 @@ export function UserAuthForm({ onLoginSuccess, onGuestMode, roomName }: UserAuth
         jwt_token: jwtToken,
         access_token: tokens?.access_token || jwtToken,
         refresh_token: tokens?.refresh_token,
-        access_expires_at: accessExpiresAt,
-        refresh_expires_at: refreshExpiresAt,
+        access_expires_at: resolvedAccessExpiresAt,
+        refresh_expires_at: resolvedRefreshExpiresAt,
         livekit_token: liveKitToken,
       };
 

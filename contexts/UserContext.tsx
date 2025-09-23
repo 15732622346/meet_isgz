@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode, useRef } from 'react';
 import { callGatewayApi } from '@/lib/api-client';
+import { getJwtExpiry } from '@/lib/token-utils';
 
 interface UserInfo {
   uid: number;
@@ -141,10 +142,19 @@ export function UserProvider({ children }: UserProviderProps) {
     }
 
     const now = Date.now();
-    const accessExpiresAt = Number(userInfo.access_expires_at || 0);
+    let accessExpiresAt = Number(userInfo.access_expires_at || 0);
 
     if (!Number.isFinite(accessExpiresAt) || accessExpiresAt <= 0) {
-      return userInfo.access_token || userInfo.jwt_token;
+      const fallbackExpiry = getJwtExpiry(userInfo.access_token || userInfo.jwt_token);
+      if (fallbackExpiry) {
+        accessExpiresAt = fallbackExpiry;
+        setUserInfo({
+          ...userInfo,
+          access_expires_at: fallbackExpiry,
+        });
+      } else {
+        return userInfo.access_token || userInfo.jwt_token;
+      }
     }
 
     // 如果access token还有5分钟以上有效期，直接返回
@@ -227,24 +237,29 @@ export function UserProvider({ children }: UserProviderProps) {
             ? refreshTokenValue
             : undefined;
 
-        const accessExpiresAt = computeExpiresAt(
+        const computedAccessExpiresAt = computeExpiresAt(
           (resolvedPayload['access_expires_at'] ?? resolvedPayload['expires_at']) as number | string | null,
           (resolvedPayload['access_expires_in'] ?? resolvedPayload['expires_in']) as number | string | null,
           nowTimestamp
         );
 
-        const refreshExpiresAt = computeExpiresAt(
+        const computedRefreshExpiresAt = computeExpiresAt(
           resolvedPayload['refresh_expires_at'] as number | string | null,
           resolvedPayload['refresh_expires_in'] as number | string | null,
           nowTimestamp
         );
 
+        const resolvedAccessExpiresAt =
+          computedAccessExpiresAt ?? getJwtExpiry(accessToken);
+        const resolvedRefreshExpiresAt =
+          computedRefreshExpiresAt ?? getJwtExpiry(refreshToken);
+
         const updatedUserInfo = {
           ...userInfo,
           access_token: accessToken,
           refresh_token: refreshToken || userInfo.refresh_token,
-          access_expires_at: accessExpiresAt ?? userInfo.access_expires_at,
-          refresh_expires_at: refreshExpiresAt ?? userInfo.refresh_expires_at,
+          access_expires_at: resolvedAccessExpiresAt ?? userInfo.access_expires_at,
+          refresh_expires_at: resolvedRefreshExpiresAt ?? userInfo.refresh_expires_at,
           jwt_token: accessToken // 兼容旧逻辑
         };
 
