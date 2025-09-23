@@ -77,6 +77,26 @@ const normalizeUserInfo = (info: UserInfo | null): UserInfo | null => {
   };
 };
 
+const computeExpiresAt = (
+  absolute?: number | string | null,
+  relative?: number | string | null,
+  now: number = Date.now(),
+): number | undefined => {
+  const absoluteTimestamp = normalizeTimestamp(absolute);
+  if (absoluteTimestamp !== undefined) {
+    return absoluteTimestamp;
+  }
+
+  if (relative !== undefined && relative !== null) {
+    const numericRelative = Number(relative);
+    if (Number.isFinite(numericRelative) && numericRelative > 0) {
+      return now + numericRelative * 1000;
+    }
+  }
+
+  return undefined;
+};
+
 export function UserProvider({ children }: UserProviderProps) {
   const [userInfo, setUserInfoState] = useState<UserInfo | null>(null);
   const [inviteCode, setInviteCodeState] = useState<string | null>(null);
@@ -144,37 +164,95 @@ export function UserProvider({ children }: UserProviderProps) {
 
     const refreshPromise = async (): Promise<string> => {
       try {
-        const response = await callGatewayApi<{
-          access_token: string;
-          refresh_token?: string;
-          access_expires_at: number;
-          refresh_expires_at?: number;
-        }>('/api/v1/auth/refresh', {
+        const response = await callGatewayApi<any>('/api/v1/auth/refresh', {
           refresh_token: userInfo.refresh_token
         }, {
           method: 'POST'
         });
 
-        if (!response.success || !response.data) {
+        if (!response || response.success === false) {
+          const message =
+            (response as any)?.message ||
+            (response as any)?.error ||
+            ((response as any)?.data && typeof (response as any).data === 'object'
+              ? (response as any).data?.message
+              : undefined) ||
+            'Token刷新失败';
+          throw new Error(message);
+        }
+
+        const nowTimestamp = Date.now();
+        const candidates: Record<string, unknown>[] = [];
+
+        if (response && typeof response === 'object') {
+          if (response.data && typeof response.data === 'object') {
+            const dataRecord = response.data as Record<string, unknown>;
+            if (dataRecord.tokens && typeof dataRecord.tokens === 'object') {
+              candidates.push(dataRecord.tokens as Record<string, unknown>);
+            }
+            candidates.push(dataRecord);
+          }
+
+          if ((response as any).tokens && typeof (response as any).tokens === 'object') {
+            candidates.push((response as any).tokens as Record<string, unknown>);
+          }
+
+          candidates.push(response as unknown as Record<string, unknown>);
+        }
+
+        let payload: Record<string, unknown> | undefined;
+        for (const record of candidates) {
+          if (record && typeof record['access_token'] === 'string') {
+            payload = record;
+            break;
+          }
+        }
+        if (!payload && candidates.length > 0) {
+          payload = candidates[0];
+        }
+        const resolvedPayload: Record<string, unknown> = payload ?? {};
+
+        const accessTokenValue =
+          resolvedPayload['access_token'] ?? resolvedPayload['token'];
+        const accessToken =
+          typeof accessTokenValue === 'string' ? accessTokenValue : undefined;
+
+        if (!accessToken) {
           throw new Error('Token刷新失败');
         }
 
-        // 更新用户信息
+        const refreshTokenValue = resolvedPayload['refresh_token'];
+        const refreshToken =
+          typeof refreshTokenValue === 'string' && refreshTokenValue.length > 0
+            ? refreshTokenValue
+            : undefined;
+
+        const accessExpiresAt = computeExpiresAt(
+          (resolvedPayload['access_expires_at'] ?? resolvedPayload['expires_at']) as number | string | null,
+          (resolvedPayload['access_expires_in'] ?? resolvedPayload['expires_in']) as number | string | null,
+          nowTimestamp
+        );
+
+        const refreshExpiresAt = computeExpiresAt(
+          resolvedPayload['refresh_expires_at'] as number | string | null,
+          resolvedPayload['refresh_expires_in'] as number | string | null,
+          nowTimestamp
+        );
+
         const updatedUserInfo = {
           ...userInfo,
-          access_token: response.data.access_token,
-          refresh_token: response.data.refresh_token || userInfo.refresh_token,
-          access_expires_at: response.data.access_expires_at,
-          refresh_expires_at: response.data.refresh_expires_at || userInfo.refresh_expires_at,
-          jwt_token: response.data.access_token // 兼容性
+          access_token: accessToken,
+          refresh_token: refreshToken || userInfo.refresh_token,
+          access_expires_at: accessExpiresAt ?? userInfo.access_expires_at,
+          refresh_expires_at: refreshExpiresAt ?? userInfo.refresh_expires_at,
+          jwt_token: accessToken // 兼容旧逻辑
         };
 
         setUserInfo(updatedUserInfo);
 
-
-        return response.data.access_token;
+        return accessToken;
       } catch (error) {
-        console.error('❌ Token刷新失败:', error);
+        console.error('Token刷新失败:', error);
         // 刷新失败，清理用户状态
         clearUserInfo();
         throw new Error('Token过期，请重新登录');
@@ -182,6 +260,7 @@ export function UserProvider({ children }: UserProviderProps) {
         refreshPromiseRef.current = null;
       }
     };
+
 
     refreshPromiseRef.current = refreshPromise();
     return refreshPromiseRef.current;

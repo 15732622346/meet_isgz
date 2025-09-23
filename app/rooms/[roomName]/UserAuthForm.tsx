@@ -11,6 +11,54 @@ import type {
   RoomDetailResponse
 } from '@/types/api';
 
+
+const parseAbsoluteTimestamp = (value?: number | string | null): number | undefined => {
+  if (value === null || value === undefined) {
+    return undefined;
+  }
+
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) {
+      return undefined;
+    }
+    return value > 0 && value < 1_000_000_000_000 ? value * 1000 : value;
+  }
+
+  if (typeof value === 'string') {
+    const numericValue = Number(value);
+    if (!Number.isNaN(numericValue)) {
+      return numericValue > 0 && numericValue < 1_000_000_000_000 ? numericValue * 1000 : numericValue;
+    }
+
+    const parsed = Date.parse(value);
+    if (!Number.isNaN(parsed)) {
+      return parsed;
+    }
+  }
+
+  return undefined;
+};
+
+const deriveExpiryTimestamp = (
+  absolute?: number | string | null,
+  relative?: number | string | null,
+  now: number = Date.now(),
+): number | undefined => {
+  const absoluteTimestamp = parseAbsoluteTimestamp(absolute);
+  if (absoluteTimestamp !== undefined) {
+    return absoluteTimestamp;
+  }
+
+  if (relative !== undefined && relative !== null) {
+    const numericRelative = Number(relative);
+    if (Number.isFinite(numericRelative) && numericRelative > 0) {
+      return now + numericRelative * 1000;
+    }
+  }
+
+  return undefined;
+};
+
 interface RoomData {
   maxMicSlots: number;
   roomName: string;
@@ -157,6 +205,19 @@ export function UserAuthForm({ onLoginSuccess, onGuestMode, roomName }: UserAuth
         : null;
 
       // 保存用户信息到UserContext
+      const tokens = loginData?.tokens;
+      const now = Date.now();
+      const accessExpiresAt = deriveExpiryTimestamp(
+        tokens?.access_expires_at ?? (loginData as any)?.access_expires_at ?? tokens?.expires_at,
+        tokens?.access_expires_in ?? tokens?.expires_in ?? (loginData as any)?.access_expires_in,
+        now,
+      );
+      const refreshExpiresAt = deriveExpiryTimestamp(
+        tokens?.refresh_expires_at ?? (loginData as any)?.refresh_expires_at,
+        tokens?.refresh_expires_in ?? (loginData as any)?.refresh_expires_in,
+        now,
+      );
+
       const userInfo = {
         uid: loginData?.uid ?? loginData?.user_id ?? loginData?.id ?? 0,
         user_name: formData.username,
@@ -164,10 +225,10 @@ export function UserAuthForm({ onLoginSuccess, onGuestMode, roomName }: UserAuth
         user_roles: loginData?.user_roles || 1,
         user_status: 1, // 活跃状态
         jwt_token: jwtToken,
-        access_token: loginData?.tokens?.access_token || jwtToken,
-        refresh_token: loginData?.tokens?.refresh_token,
-        access_expires_at: loginData?.tokens?.access_expires_at,
-        refresh_expires_at: loginData?.tokens?.refresh_expires_at,
+        access_token: tokens?.access_token || jwtToken,
+        refresh_token: tokens?.refresh_token,
+        access_expires_at: accessExpiresAt,
+        refresh_expires_at: refreshExpiresAt,
         livekit_token: liveKitToken,
       };
 
@@ -358,6 +419,19 @@ export function UserAuthForm({ onLoginSuccess, onGuestMode, roomName }: UserAuth
       const liveKitToken = roomData?.livekit_token || roomData?.token || '';
 
       // 保存用户信息到UserContext
+      const tokens = loginData?.tokens;
+      const now = Date.now();
+      const accessExpiresAt = deriveExpiryTimestamp(
+        tokens?.access_expires_at ?? (loginData as any)?.access_expires_at ?? tokens?.expires_at,
+        tokens?.access_expires_in ?? tokens?.expires_in ?? (loginData as any)?.access_expires_in,
+        now,
+      );
+      const refreshExpiresAt = deriveExpiryTimestamp(
+        tokens?.refresh_expires_at ?? (loginData as any)?.refresh_expires_at,
+        tokens?.refresh_expires_in ?? (loginData as any)?.refresh_expires_in,
+        now,
+      );
+
       const userInfo = {
         uid: loginData?.uid ?? loginData?.user_id ?? loginData?.id ?? 0,
         user_name: formData.username,
@@ -365,10 +439,10 @@ export function UserAuthForm({ onLoginSuccess, onGuestMode, roomName }: UserAuth
         user_roles: loginData?.user_roles || 1,
         user_status: 1,
         jwt_token: jwtToken,
-        access_token: loginData?.tokens?.access_token || jwtToken,
-        refresh_token: loginData?.tokens?.refresh_token,
-        access_expires_at: loginData?.tokens?.access_expires_at,
-        refresh_expires_at: loginData?.tokens?.refresh_expires_at,
+        access_token: tokens?.access_token || jwtToken,
+        refresh_token: tokens?.refresh_token,
+        access_expires_at: accessExpiresAt,
+        refresh_expires_at: refreshExpiresAt,
         livekit_token: liveKitToken,
       };
 
