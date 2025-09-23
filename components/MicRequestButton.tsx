@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { useParticipantContext } from '@livekit/components-react';
-import { parseParticipantMetadata, canRequestMic } from '../lib/token-utils';
+import { parseParticipantMetadata, canRequestMic, getParticipantMetadataSource } from '../lib/token-utils';
 
 interface MicRequestButtonProps {
   userRole?: number;
@@ -11,7 +11,7 @@ interface MicRequestButtonProps {
 
 export function MicRequestButton({ userRole = 1, disabled = false }: MicRequestButtonProps) {
   const participant = useParticipantContext();
-  const metadata = participant?.metadata ?? null;
+  const metadata = getParticipantMetadataSource(participant ?? undefined);
   const participantMeta = parseParticipantMetadata(metadata);
 
   if (userRole >= 2) {

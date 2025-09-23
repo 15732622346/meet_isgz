@@ -53,7 +53,8 @@ import {
   isCameraEnabled,
   isUserDisabled,
   canCurrentUserControlParticipant,
-  updateParticipantMetadata
+  updateParticipantMetadata,
+  getParticipantMetadataSource
 } from '../../../lib/token-utils';
 interface CustomVideoConferenceProps {
   chatMessageFormatter?: MessageFormatter;
@@ -263,7 +264,8 @@ export function CustomVideoConference({
   const roleCache = React.useRef<Record<string, number>>({});
   const getParticipantRole = React.useCallback(
     (participant: Participant) => {
-      const metadata = parseParticipantMetadata(participant.metadata);
+      const metadataSource = getParticipantMetadataSource(participant);
+      const metadata = parseParticipantMetadata(metadataSource);
       const attributes = participant.attributes || {};
       const normalizeRole = (value: unknown): number | undefined => {
         if (typeof value === 'number' && Number.isFinite(value)) {
@@ -2513,7 +2515,7 @@ function MicParticipantList({ currentUserRole, currentUserName, roomInfo, userTo
   const micListParticipants = React.useMemo(() => {
     return [...allParticipants]
       .filter(participant => {
-        return shouldShowInMicList(participant.attributes || {});
+        return shouldShowInMicList(getParticipantMetadataSource(participant));
       })
       .sort((a, b) => {
         const roleA = getParticipantRole(a);
@@ -2570,27 +2572,23 @@ function MicParticipantTile({ currentUserRole, onApproveMic, userToken, setDebug
   const room = useRoomContext();
   if (!participant) return null;
   const getParticipantRole = (participant: Participant): number => {
-    const attributes = participant.attributes || {};
-    const role = parseInt(attributes.role || '1');
-    return role;
+    const status = parseParticipantMetadata(getParticipantMetadataSource(participant));
+    return parseInt(status.role || '1', 10);
   };
   // 🎯 获取麦克风状态图标
-  const getMicStatusIcon = (attributes: Record<string, string>): string => {
-    const status = parseParticipantAttributes(attributes);
-    // 使用绝对URL路径
-    const baseUrl = window.location.origin; // 获取当前网站的根URL
-    // 尝试多种不同的路径格式
+  const getMicStatusIcon = (status: ReturnType<typeof parseParticipantMetadata>): string => {
     const micStatus = status.micStatus;
-    // 直接使用相对路径，不带域名
     if (micStatus === 'requesting') return '/images/needmic.png';
     if (micStatus === 'on_mic') return '/images/mic.png';
     if (micStatus === 'muted') return '/images/nomic.png';
     return '/images/nomic.png';
   };
-  const role = getParticipantRole(participant);
+  const participantMetadataSource = getParticipantMetadataSource(participant);
+  const participantStatus = parseParticipantMetadata(participantMetadataSource);
+  const role = parseInt(participantStatus.role || '1', 10);
   const roleText = role === 3 ? '管理员' : role === 2 ? '主持人' : role === 0 ? '游客' : '普通会员';
-  const micStatusText = getMicStatusText(participant.attributes || {});
-  const micStatusIcon = getMicStatusIcon(participant.attributes || {});
+  const micStatusText = getMicStatusText(participantMetadataSource);
+  const micStatusIcon = getMicStatusIcon(participantStatus);
   const isHost = currentUserRole === 2 || currentUserRole === 3;
   const isTargetMember = role === 1;
   // 🎯 判断当前参与者是否是自己

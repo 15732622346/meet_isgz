@@ -13,7 +13,8 @@ import {
   getRoleText,
   shouldShowVideoFrame,
   isCameraEnabled,
-  getVideoFrameStatusText
+  getVideoFrameStatusText,
+  getParticipantMetadataSource
 } from '../lib/token-utils';
 
 /**
@@ -88,29 +89,29 @@ export function AttributeBasedVideoTile({
   const [forceUpdate, setForceUpdate] = React.useState(0);
   
   // 🎯 解析参与者属性
-  const metadata = participant.metadata ?? null;
-  const participantStatus = parseParticipantMetadata(metadata);
+  const metadataSource = getParticipantMetadataSource(participant);
+  const participantStatus = parseParticipantMetadata(metadataSource);
   
   // 🎨 根据属性计算样式类名
   const computedClassName = React.useMemo(() => {
     const baseClasses = ['attribute-based-video-tile'];
     
     // 根据角色添加样式类
-    if (isHostOrAdmin(metadata)) {
+    if (isHostOrAdmin(metadataSource)) {
       baseClasses.push('video-tile-host');
     } else {
       baseClasses.push('video-tile-member');
     }
     
     // 根据麦位状态添加样式类
-    if (isOnMic(metadata)) {
+    if (isOnMic(metadataSource)) {
       baseClasses.push('video-tile-on-mic');
-    } else if (isRequestingMic(metadata)) {
+    } else if (isRequestingMic(metadataSource)) {
       baseClasses.push('video-tile-requesting');
     }
     
     // 根据静音状态添加样式类
-    if (isMuted(metadata)) {
+    if (isMuted(metadataSource)) {
       baseClasses.push('video-tile-muted');
     }
     
@@ -139,13 +140,13 @@ export function AttributeBasedVideoTile({
     };
     
     // 根据角色调整边框
-    if (isHostOrAdmin(metadata)) {
+    if (isHostOrAdmin(metadataSource)) {
       baseStyle.border = '2px solid #ff6b35'; // 主持人橙色边框
       baseStyle.boxShadow = '0 0 10px rgba(255, 107, 53, 0.3)';
-    } else if (isOnMic(metadata)) {
+    } else if (isOnMic(metadataSource)) {
       baseStyle.border = '2px solid #4CAF50'; // 已上麦绿色边框
       baseStyle.boxShadow = '0 0 10px rgba(76, 175, 80, 0.3)';
-    } else if (isRequestingMic(metadata)) {
+    } else if (isRequestingMic(metadataSource)) {
       baseStyle.border = '2px solid #FFC107'; // 申请中黄色边框
       baseStyle.boxShadow = '0 0 10px rgba(255, 193, 7, 0.3)';
     } else {
@@ -153,7 +154,7 @@ export function AttributeBasedVideoTile({
     }
     
     // 根据静音状态调整透明度
-    if (isMuted(metadata)) {
+    if (isMuted(metadataSource)) {
       baseStyle.opacity = 0.7;
     }
     
@@ -244,7 +245,7 @@ export function AttributeBasedVideoTile({
   
   // 🎯 如果不应该显示视频框，返回 null（完全隐藏）
   if (!shouldShowVideo) {
-    console.log(`🙈 隐藏视频框 - ${participant.identity} (${getRoleText(metadata)})`);
+    console.log(`🙈 隐藏视频框 - ${participant.identity} (${getRoleText(metadataSource)})`);
     return null;
   }
   
@@ -267,8 +268,8 @@ export function AttributeBasedVideoTile({
       onDoubleClick={handleDoubleClick}
       draggable={draggable}
       data-participant-id={participant.identity}
-      data-participant-role={getRoleText(metadata)}
-      data-mic-status={getMicStatusText(metadata)}
+      data-participant-role={getRoleText(metadataSource)}
+      data-mic-status={getMicStatusText(metadataSource)}
     >
       {/* 直接渲染视频元素，不使用额外的容器 */}
       <video 

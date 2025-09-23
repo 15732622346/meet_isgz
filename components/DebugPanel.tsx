@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useRoomContext, useParticipants, useLocalParticipant } from '@livekit/components-react';
-import { parseParticipantMetadata } from '../lib/token-utils';
+import { parseParticipantMetadata, getParticipantMetadataSource } from '../lib/token-utils';
 
 interface DebugPanelProps {
   onClose?: () => void;
@@ -12,7 +12,7 @@ export function DebugPanel({ onClose }: DebugPanelProps) {
   const room = useRoomContext();
   const participants = useParticipants();
   const { localParticipant } = useLocalParticipant();
-  const localMetadata = localParticipant?.metadata ?? null;
+  const localMetadata = getParticipantMetadataSource(localParticipant ?? undefined);
   const localParsedMeta = React.useMemo(() => parseParticipantMetadata(localMetadata), [localMetadata]);
   const [position, setPosition] = useState({ x: 20, y: 20 });
   const [isDragging, setIsDragging] = useState(false);
@@ -111,7 +111,7 @@ export function DebugPanel({ onClose }: DebugPanelProps) {
     setEventListenerStatus('已设定');
 
     const updateCachedState = () => {
-      const parsed = parseParticipantMetadata(localParticipant.metadata);
+      const parsed = parseParticipantMetadata(getParticipantMetadataSource(localParticipant ?? undefined));
       prevRole.current = parsed.role;
       prevMicStatus.current = parsed.micStatus;
       prevDisplayStatus.current = parsed.displayStatus;

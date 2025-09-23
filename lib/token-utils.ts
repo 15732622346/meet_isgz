@@ -51,6 +51,41 @@ export function parseTokenMetadata(token: string): TokenMetadata | null {
   }
 }
 
+export function getParticipantMetadataSource(participant?: Pick<Participant, 'metadata' | 'attributes'>): ParticipantMetadataSource {
+  if (!participant) {
+    return null;
+  }
+
+  const attributes = participant.attributes as Record<string, unknown> | undefined;
+  if (attributes && Object.keys(attributes).length > 0) {
+    const normalized: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(attributes)) {
+      if (value === undefined) {
+        continue;
+      }
+      if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (!trimmed) {
+          normalized[key] = '';
+          continue;
+        }
+        try {
+          normalized[key] = JSON.parse(trimmed);
+          continue;
+        } catch {
+          // fall through
+        }
+        normalized[key] = trimmed;
+      } else {
+        normalized[key] = value;
+      }
+    }
+    return normalized;
+  }
+
+  return participant.metadata ?? null;
+}
+
 export function parseParticipantMetadata(metadata?: ParticipantMetadataSource): ParticipantMicStatus {
   if (metadata === null || metadata === undefined) {
     return { ...DEFAULT_PARTICIPANT_STATUS };
@@ -227,7 +262,7 @@ export function isCameraMuted(participant: Participant): boolean {
 }
 
 export function shouldShowVideoFrame(participant: Participant): boolean {
-  const isHostRole = isHostOrAdmin(participant.metadata);
+  const isHostRole = isHostOrAdmin(getParticipantMetadataSource(participant));
   if (isHostRole) {
     const cameraEnabled = isCameraEnabled(participant);
     console.log(`🎥 主持人${participant.identity} 摄像头状态检测`, {
@@ -242,7 +277,7 @@ export function shouldShowVideoFrame(participant: Participant): boolean {
 }
 
 export function getVideoFrameStatusText(participant: Participant): string {
-  const isHostRole = isHostOrAdmin(participant.metadata);
+  const isHostRole = isHostOrAdmin(getParticipantMetadataSource(participant));
   if (isHostRole) {
     if (isCameraEnabled(participant)) {
       return '摄像头已开启';

@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useLocalParticipant, useParticipants, useRoomInfo } from '@livekit/components-react';
 import { callGatewayApi, normalizeGatewayResponse } from '@/lib/api-client';
-import { parseParticipantMetadata, shouldShowInMicList, isOnMic, isRequestingMic, isHostOrAdmin } from '@/lib/token-utils';
+import { parseParticipantMetadata, shouldShowInMicList, isOnMic, isRequestingMic, isHostOrAdmin, getParticipantMetadataSource } from '@/lib/token-utils';
 
 // 🎯 纯 Participant 状态管理的 Hook
 const useParticipantState = (roomDetails?: { maxMicSlots?: number } | null, roleOverride?: number) => {
@@ -12,8 +12,8 @@ const useParticipantState = (roomDetails?: { maxMicSlots?: number } | null, role
   const roomInfo = useRoomInfo();
   
   return React.useMemo(() => {
-    const metadata = localParticipant?.metadata ?? null;
-    const participantMeta = parseParticipantMetadata(metadata);
+    const metadataSource = getParticipantMetadataSource(localParticipant ?? undefined);
+    const participantMeta = parseParticipantMetadata(metadataSource);
 
     const normalizeRole = (value: unknown): number | undefined => {
       if (typeof value === 'number' && Number.isFinite(value)) {
@@ -82,10 +82,10 @@ const useParticipantState = (roomDetails?: { maxMicSlots?: number } | null, role
       return false;
     })();
 
-    const micListCount = participants.filter(p => shouldShowInMicList(p.metadata)).length;
-    const onMicCount = participants.filter(p => isOnMic(p.metadata)).length;
-    const requestingCount = participants.filter(p => isRequestingMic(p.metadata)).length;
-    const hasHost = participants.some(p => isHostOrAdmin(p.metadata));
+    const micListCount = participants.filter(p => shouldShowInMicList(getParticipantMetadataSource(p))).length;
+    const onMicCount = participants.filter(p => isOnMic(getParticipantMetadataSource(p))).length;
+    const requestingCount = participants.filter(p => isRequestingMic(getParticipantMetadataSource(p))).length;
+    const hasHost = participants.some(p => isHostOrAdmin(getParticipantMetadataSource(p)));
     const maxSlots = roomDetails?.maxMicSlots;
 
     const micStats = {
@@ -112,11 +112,11 @@ const useParticipantState = (roomDetails?: { maxMicSlots?: number } | null, role
       canManageRoom,
       canUseMic,
       micStats,
-      metadata,
+      metadataSource,
       participantMeta,
       permissions: localParticipant?.permissions,
     };
-  }, [localParticipant?.metadata, localParticipant?.permissions, participants, roomDetails, roleOverride]);
+  }, [localParticipant?.metadata, localParticipant?.attributes, localParticipant?.permissions, participants, roomDetails, roleOverride]);
 
 };
 
@@ -299,7 +299,7 @@ export function ModernFooter({
       canUseMic: participantState.canUseMic,
       micStatus: participantState.micStatus,
       role: participantState.role,
-      metadata: participantState.metadata,
+      metadata: participantState.metadataSource,
       participantMeta: participantState.participantMeta,
       permissions: participantState.permissions
     });
@@ -368,7 +368,7 @@ export function ModernFooter({
         console.error('🚨 权限不足详情:', {
           error: error.message,
           permissions: localParticipant?.permissions,
-          metadata: localParticipant?.metadata
+          metadata: getParticipantMetadataSource(localParticipant ?? undefined)
         });
         alert(`⚠️ 麦克风权限不足！\n\n可能的解决方案：\n1. 联系主持人重新批准上麦\n2. 刷新页面重新登录\n3. 检查您的用户角色权限\n\n错误详情: ${error.message}`);
       } else {
