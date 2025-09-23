@@ -39,6 +39,7 @@ import { AttributeBasedVideoTile } from '../../../components/AttributeBasedVideo
 import { HideLiveKitCounters } from '../../../components/HideLiveKitCounters';
 import { API_CONFIG } from '@/lib/config';
 import { callGatewayApi } from '@/lib/api-client';
+import { resolveAssetPath } from '@/lib/assetPath';
 import { useUserContext } from '@/contexts/UserContext';
 import {
   shouldShowInMicList,
@@ -2468,6 +2469,7 @@ interface MicListProps {
   setDebugInfo?: (updater: (prev: string) => string) => void;
 }
 function MicParticipantList({ currentUserRole, currentUserName, roomInfo, userToken, maxMicSlots, setDebugInfo }: MicListProps) {
+  const { resolveGatewayToken, userInfo } = useUserContext();
   const allParticipants = useParticipants();
   // 🎯 LiveKit原生角色获取函数
   const getParticipantRole = (participant: Participant): number => {
@@ -2566,6 +2568,7 @@ interface MicParticipantTileProps {
   currentUserName?: string; // 添加当前用户名称参数
 }
 function MicParticipantTile({ currentUserRole, onApproveMic, userToken, setDebugInfo, currentUserName }: MicParticipantTileProps) {
+  const { resolveGatewayToken, userInfo } = useUserContext();
   const participant = React.useContext(ParticipantContext);
   const [showControlMenu, setShowControlMenu] = React.useState(false);
   const [isLoading, setIsLoading] = React.useState(false);
@@ -2578,10 +2581,16 @@ function MicParticipantTile({ currentUserRole, onApproveMic, userToken, setDebug
   // 🎯 获取麦克风状态图标
   const getMicStatusIcon = (status: ReturnType<typeof parseParticipantMetadata>): string => {
     const micStatus = status.micStatus;
-    if (micStatus === 'requesting') return '/images/needmic.png';
-    if (micStatus === 'on_mic') return '/images/mic.png';
-    if (micStatus === 'muted') return '/images/nomic.png';
-    return '/images/nomic.png';
+    if (micStatus === 'requesting') {
+      return resolveAssetPath('/images/needmic.png');
+    }
+    if (micStatus === 'on_mic') {
+      return resolveAssetPath('/images/mic.png');
+    }
+    if (micStatus === 'muted') {
+      return resolveAssetPath('/images/nomic.png');
+    }
+    return resolveAssetPath('/images/nomic.png');
   };
   const participantMetadataSource = getParticipantMetadataSource(participant);
   const participantStatus = parseParticipantMetadata(participantMetadataSource);
