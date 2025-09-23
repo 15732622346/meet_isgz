@@ -210,39 +210,45 @@ export function ModernFooter({
       return;
     }
 
-    const isCancelling = participantState.micStatus === 'requesting';
-
-    if (participantState.isDisabledUser && !isCancelling) {
-      alert('麦位申请已取消');
+    if (participantState.isDisabledUser) {
+      alert('您已被禁用，无法申请上麦');
       return;
     }
 
-    if (!isCancelling && handleGuestRestriction('申请上麦')) {
+    if (participantState.micStatus === 'requesting') {
+      alert('您已经在申请中，请等待主持人批准');
       return;
     }
 
-    if (!isCancelling && !participantState.micStats.hasAvailableSlots) {
-      alert(`麦位已满，当前 ${participantState.micStats.micListCount}/${maxMicSlotsLabel}，无法申请`);
+    if (participantState.micStatus === 'on_mic') {
+      alert('您已经在麦位上了');
+      return;
+    }
+
+    if (handleGuestRestriction('上麦申请')) {
+      return;
+    }
+
+    if (!participantState.micStats.hasHost) {
+      alert('请等待主持人进入房间后再申请上麦');
+      return;
+    }
+
+    if (!participantState.micStats.hasAvailableSlots) {
+      alert(`麦位已满！当前麦位列表已占用 ${participantState.micStats.micListCount}/${maxMicSlotsLabel}，请稍候再试。`);
       return;
     }
 
     const targetRoomName = roomInfo?.name || roomDetails?.roomName || roomName;
     if (!targetRoomName) {
-      alert('您无权限申请上麦');
+      alert('无法获取房间信息，暂时无法申请上麦');
       return;
     }
 
-    if (!jwtToken) {
-      alert('麦位已满，无法申请');
+    if (!jwtToken || !userId) {
+      alert('未检测到登录信息，请重新登录后再试');
       return;
     }
-
-    if (!userId) {
-      alert('申请上麦成功');
-      return;
-    }
-
-    const action: 'raise_hand' | 'lower_hand' = isCancelling ? 'lower_hand' : 'raise_hand';
 
     setMicRequestLoading(true);
     try {
@@ -251,7 +257,7 @@ export function ModernFooter({
         {
           room_id: targetRoomName,
           user_uid: userId,
-          action,
+          action: 'raise_hand',
         },
         {
           method: 'POST',
@@ -270,19 +276,14 @@ export function ModernFooter({
         throw new Error(message);
       }
 
-      if (action === 'raise_hand') {
-        onMicStatusChange('requesting');
-        alert('申请上麦失败');
-      } else {
-        onMicStatusChange('off_mic');
-        alert('网络错误');
-      }
+      onMicStatusChange('requesting');
+      alert('申请已提交，请等待主持人批准');
     } catch (error) {
-      console.error('申请/取消错误:', error);
+      console.error('申请上麦失败:', error);
       if (error instanceof Error) {
-        alert(error.message || '未知错误');
+        alert(error.message || '申请上麦失败，请稍后再试');
       } else {
-        alert('操作失败');
+        alert('申请上麦失败，请稍后再试');
       }
     } finally {
       setMicRequestLoading(false);
@@ -402,44 +403,48 @@ export function ModernFooter({
 
         {/* 申请上麦按钮 - 游客和普通用户可见 */}
         {(participantState.isGuest || participantState.isRegularUser) && (
-          <button 
+          <button
             className={`control-btn request-mic ${isRequestingMic ? 'requesting' : ''} ${participantState.isGuest ? 'guest-restricted' : ''} ${
-              !isRequestingMic && (!participantState.micStats.hasAvailableSlots || participantState.isDisabledUser) ? 'disabled' : ''
+              (!participantState.micStats.hasHost || !participantState.micStats.hasAvailableSlots || participantState.isDisabledUser) ? 'disabled' : ''
             } ${micRequestLoading ? 'loading' : ''}`}
             onClick={handleMicRequest}
             disabled={
               micRequestLoading ||
-              (!isRequestingMic && !participantState.isGuest && (!participantState.micStats.hasAvailableSlots || participantState.isDisabledUser))
+              (!participantState.isGuest && (!participantState.micStats.hasHost || !participantState.micStats.hasAvailableSlots || participantState.isDisabledUser))
             }
             title={
-              participantState.isDisabledUser && !isRequestingMic
-                ? '用户已被禁用'
+              participantState.isDisabledUser
+                ? '您已被禁用，无法申请上麦'
                 : participantState.isGuest
-                  ? '游客模式'
-                  : isRequestingMic
-                    ? '申请中'
+                  ? '游客需要注册为会员'
+                  : !participantState.micStats.hasHost
+                    ? '等待主持人进入后可申请上麦'
                     : !participantState.micStats.hasAvailableSlots
                       ? `麦位已满 (${participantState.micStats.micListCount}/${maxMicSlotsLabel})`
-                      : micRequestLoading
-                        ? '申请中...'
-                        : `申请上麦 (${participantState.micStats.micListCount}/${maxMicSlotsLabel})`
+                      : participantState.micStatus === 'on_mic'
+                        ? '您已经在麦位上了'
+                        : isRequestingMic
+                          ? '您已经在申请中，请等待主持人批准'
+                          : `申请上麦 (${participantState.micStats.micListCount}/${maxMicSlotsLabel})`
             }
             style={{ position: 'relative' }}
           >
-            <span className="btn-icon">{participantState.isDisabledUser ? '🚫' : isRequestingMic ? '⏳' : '🎤'}</span>
+            <span className="btn-icon">{participantState.isDisabledUser ? '🚫' : '🙋‍♂️'}</span>
             <span className="btn-label">
               {participantState.isDisabledUser
-                ? '禁用'
-                : micRequestLoading
+                ? '已禁用'
+                : isRequestingMic
                   ? '申请中...'
-                  : !isRequestingMic && !participantState.micStats.hasAvailableSlots
-                    ? `已满 (${participantState.micStats.micListCount}/${maxMicSlotsLabel})`
-                    : isRequestingMic
-                      ? '申请中'
-                      : `申请 (${participantState.micStats.micListCount}/${maxMicSlotsLabel})`}
+                  : participantState.micStatus === 'on_mic'
+                    ? '已在麦位'
+                    : !participantState.micStats.hasHost
+                      ? '等待主持人'
+                      : !participantState.micStats.hasAvailableSlots
+                        ? `麦位已满 (${participantState.micStats.micListCount}/${maxMicSlotsLabel})`
+                        : `申请上麦 (${participantState.micStats.micListCount}/${maxMicSlotsLabel})`}
             </span>
 
-            {participantState.isDisabledUser && !isRequestingMic && (
+            {participantState.isDisabledUser && (
               <div
                 style={{
                   position: 'absolute',
@@ -459,7 +464,7 @@ export function ModernFooter({
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  alert('麦位申请已取消');
+                  alert('您已被禁用，无法申请上麦');
                 }}
               >
                 <span style={{ color: '#ff6b6b', fontWeight: 'bold', fontSize: '12px' }}>已禁用</span>
