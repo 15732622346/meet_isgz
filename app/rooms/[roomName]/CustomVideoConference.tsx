@@ -57,6 +57,46 @@ import {
   updateParticipantMetadata,
   getParticipantMetadataSource
 } from '../../../lib/token-utils';
+
+const normalizeUid = (value: unknown): number | null => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value.trim());
+    if (!Number.isNaN(parsed)) {
+      return parsed;
+    }
+  }
+  return null;
+};
+
+const extractParticipantUid = (participant?: Participant): number | null => {
+  if (!participant) {
+    return null;
+  }
+
+  const metadata = getParticipantMetadataSource(participant);
+  const parsedMetadata = parseParticipantMetadata(metadata);
+  const raw = parsedMetadata.raw ?? {};
+
+  const candidates: unknown[] = [
+    (raw as Record<string, unknown>).user_uid,
+    (raw as Record<string, unknown>).userUid,
+    participant.attributes?.user_uid,
+    participant.attributes?.uid,
+    participant.identity?.replace(/^user_/, ''),
+  ];
+
+  for (const candidate of candidates) {
+    const uid = normalizeUid(candidate);
+    if (uid !== null) {
+      return uid;
+    }
+  }
+
+  return null;
+};
 interface CustomVideoConferenceProps {
   chatMessageFormatter?: MessageFormatter;
   SettingsComponent?: React.ComponentType<{ onClose?: () => void }>;
@@ -1291,12 +1331,23 @@ export function CustomVideoConference({
       // 获取Gateway token
       const token = await resolveGatewayToken();
 
+      const targetUid = extractParticipantUid(participant);
+      if (!targetUid) {
+        throw new Error('缺少参与者 UID，无法批准上麦');
+      }
+      const hostUid = userInfo?.uid;
+      if (!hostUid) {
+        throw new Error('缺少主持人 UID，无法批准上麦');
+      }
+
       // 调用Gateway API批准上麦
       const response = await callGatewayApi('/api/v1/participants/grant-publish', {
         room_id: roomInfo?.name,
         participant_identity: participant.identity,
-        operator_id: userInfo?.uid,
-        action: 'approve_mic',
+        operator_id: hostUid,
+        host_user_id: hostUid,
+        user_uid: targetUid,
+        action: 'approve',
         publish_audio: true,
         publish_video: false,
         approve_time: new Date().toISOString(),
@@ -2485,13 +2536,23 @@ function MicParticipantList({ currentUserRole, currentUserName, roomInfo, userTo
 
       // 获取Gateway token
       const token = await resolveGatewayToken();
+      const targetUid = extractParticipantUid(participant);
+      if (!targetUid) {
+        throw new Error('缺少参与者 UID，无法批准上麦');
+      }
+      const hostUid = userInfo?.uid;
+      if (!hostUid) {
+        throw new Error('缺少主持人 UID，无法批准上麦');
+      }
 
       // 调用Gateway API批准上麦
       const response = await callGatewayApi('/api/v1/participants/grant-publish', {
         room_id: roomInfo.name,
         participant_identity: participant.identity,
-        operator_id: userInfo?.uid,
-        action: 'approve_mic',
+        operator_id: hostUid,
+        host_user_id: hostUid,
+        user_uid: targetUid,
+        action: 'approve',
         publish_audio: true,
         publish_video: false,
         approve_time: new Date().toISOString(),
@@ -2611,12 +2672,22 @@ function MicParticipantTile({ currentUserRole, onApproveMic, userToken, setDebug
 
       // 获取Gateway token
       const token = await resolveGatewayToken();
+      const hostUid = userInfo?.uid;
+      if (!hostUid) {
+        throw new Error('缺少主持人 UID，无法执行操作');
+      }
+      const targetUid = extractParticipantUid(participant);
+      if (!targetUid) {
+        throw new Error('缺少参与者 UID，无法执行操作');
+      }
 
       let endpoint = '';
       let payload: any = {
         room_id: room.name,
         participant_identity: participant.identity,
-        operator_id: userInfo?.uid,
+        operator_id: hostUid,
+        host_user_id: hostUid,
+        user_uid: targetUid,
         ...additionalData
       };
 
@@ -2626,7 +2697,7 @@ function MicParticipantTile({ currentUserRole, onApproveMic, userToken, setDebug
           endpoint = '/api/v1/participants/grant-publish';
           payload = {
             ...payload,
-            action: 'approve_mic',
+            action: 'approve',
             publish_audio: true,
             publish_video: false,
             approve_time: new Date().toISOString(),

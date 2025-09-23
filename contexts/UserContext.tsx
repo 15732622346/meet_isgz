@@ -38,6 +38,45 @@ interface UserProviderProps {
   children: ReactNode;
 }
 
+const normalizeTimestamp = (value?: number | string | null): number | undefined => {
+  if (value === null || value === undefined) {
+    return undefined;
+  }
+
+  if (typeof value === 'number') {
+    return value > 0 && value < 1_000_000_000_000 ? value * 1000 : value;
+  }
+
+  if (typeof value === 'string') {
+    const numericValue = Number(value);
+    if (!Number.isNaN(numericValue)) {
+      return numericValue > 0 && numericValue < 1_000_000_000_000 ? numericValue * 1000 : numericValue;
+    }
+
+    const parsed = Date.parse(value);
+    if (!Number.isNaN(parsed)) {
+      return parsed;
+    }
+  }
+
+  return undefined;
+};
+
+const normalizeUserInfo = (info: UserInfo | null): UserInfo | null => {
+  if (!info) {
+    return info;
+  }
+
+  const accessExpiresAt = normalizeTimestamp(info.access_expires_at);
+  const refreshExpiresAt = normalizeTimestamp(info.refresh_expires_at);
+
+  return {
+    ...info,
+    access_expires_at: accessExpiresAt,
+    refresh_expires_at: refreshExpiresAt,
+  };
+};
+
 export function UserProvider({ children }: UserProviderProps) {
   const [userInfo, setUserInfoState] = useState<UserInfo | null>(null);
   const [inviteCode, setInviteCodeState] = useState<string | null>(null);
@@ -61,11 +100,13 @@ export function UserProvider({ children }: UserProviderProps) {
   };
 
   const setUserInfo = (info: UserInfo | null) => {
-    setUserInfoState(info);
-    setInviteCodeState(info?.invite_code ?? null);
+    const normalizedInfo = normalizeUserInfo(info);
+
+    setUserInfoState(normalizedInfo);
+    setInviteCodeState(normalizedInfo?.invite_code ?? null);
     // 同步角色信息到全局缓存（供非React环境使用）
     if (typeof window !== 'undefined') {
-      (window as any).__USER_ROLE_CACHE__ = info?.user_roles ?? 1;
+      (window as any).__USER_ROLE_CACHE__ = normalizedInfo?.user_roles ?? 1;
     }
   };
 
@@ -80,7 +121,11 @@ export function UserProvider({ children }: UserProviderProps) {
     }
 
     const now = Date.now();
-    const accessExpiresAt = userInfo.access_expires_at || 0;
+    const accessExpiresAt = Number(userInfo.access_expires_at || 0);
+
+    if (!Number.isFinite(accessExpiresAt) || accessExpiresAt <= 0) {
+      return userInfo.access_token || userInfo.jwt_token;
+    }
 
     // 如果access token还有5分钟以上有效期，直接返回
     if (accessExpiresAt > now + 5 * 60 * 1000) {
