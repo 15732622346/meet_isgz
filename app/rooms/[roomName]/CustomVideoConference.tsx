@@ -38,7 +38,7 @@ import { AudioShareHelper } from '../../../components/AudioShareHelper';
 import { AttributeBasedVideoTile } from '../../../components/AttributeBasedVideoTile';
 import { HideLiveKitCounters } from '../../../components/HideLiveKitCounters';
 import { API_CONFIG } from '@/lib/config';
-import { callGatewayApi } from '@/lib/api-client';
+import { callGatewayApi, normalizeGatewayResponse } from '@/lib/api-client';
 import { resolveAssetPath } from '@/lib/assetPath';
 import { useUserContext } from '@/contexts/UserContext';
 import {
@@ -145,6 +145,7 @@ export function CustomVideoConference({
     showSettings: false,
   });
   const [isScreenSharing, setIsScreenSharing] = React.useState(false);
+  const [isLocalCameraEnabled, setIsLocalCameraEnabled] = React.useState(false);
   const [autoScreenShareAttempted, setAutoScreenShareAttempted] = React.useState(false);
   const [currentMicStatus, setCurrentMicStatus] = React.useState<'disabled' | 'enabled' | 'requesting' | 'muted_by_host'>('disabled');
   const [showChatMenu, setShowChatMenu] = React.useState(false);
@@ -192,9 +193,17 @@ export function CustomVideoConference({
       { source: Track.Source.Camera, withPlaceholder: true },
       { source: Track.Source.ScreenShare, withPlaceholder: false },
     ],
-    { updateOnlyOn: [RoomEvent.ActiveSpeakersChanged], onlySubscribed: false },
+    { onlySubscribed: false },
   );
   const layoutContext = useCreateLayoutContext();
+  React.useEffect(() => {
+    console.log('🔭 Tracks update', tracks.map(track => ({
+      participant: track.participant?.identity,
+      isLocal: track.participant?.isLocal,
+      source: track.source,
+      hasTrack: Boolean(track.publication?.track)
+    })), 'localCameraEnabled', isLocalCameraEnabled);
+  }, [tracks, isLocalCameraEnabled]);
   // 🎯 当房间连接时，获取房间详情
       React.useEffect(() => {
     if (!roomInfo.name) {
@@ -495,22 +504,60 @@ export function CustomVideoConference({
   }, [localParticipant, userRole, autoScreenShareAttempted]);
   // 监听本地参与者状态变化
   React.useEffect(() => {
-    if (!localParticipant) return;
+    if (!localParticipant) {
+      setIsLocalCameraEnabled(false);
+      return;
+    }
+
+    const updateCameraState = () => {
+      setIsLocalCameraEnabled(isCameraEnabled(localParticipant));
+    };
+
+    updateCameraState();
+
     const handleTrackMuted = (track: any) => {
       if (track.source === Track.Source.ScreenShare) {
         setIsScreenSharing(false);
+      }
+      if (track.source === Track.Source.Camera) {
+        updateCameraState();
       }
     };
     const handleTrackUnmuted = (track: any) => {
       if (track.source === Track.Source.ScreenShare) {
         setIsScreenSharing(true);
       }
+      if (track.source === Track.Source.Camera) {
+        updateCameraState();
+      }
     };
+    const handleTrackPublished = (publication: any) => {
+      if (publication.source === Track.Source.Camera) {
+        updateCameraState();
+      }
+      if (publication.source === Track.Source.ScreenShare) {
+        setIsScreenSharing(true);
+      }
+    };
+    const handleTrackUnpublished = (publication: any) => {
+      if (publication.source === Track.Source.ScreenShare) {
+        setIsScreenSharing(false);
+      }
+      if (publication.source === Track.Source.Camera) {
+        updateCameraState();
+      }
+    };
+
     localParticipant.on('trackMuted', handleTrackMuted);
     localParticipant.on('trackUnmuted', handleTrackUnmuted);
+    localParticipant.on('trackPublished', handleTrackPublished);
+    localParticipant.on('trackUnpublished', handleTrackUnpublished);
+
     return () => {
       localParticipant.off('trackMuted', handleTrackMuted);
       localParticipant.off('trackUnmuted', handleTrackUnmuted);
+      localParticipant.off('trackPublished', handleTrackPublished);
+      localParticipant.off('trackUnpublished', handleTrackUnpublished);
     };
   }, [localParticipant]);
   // 当房间连接成功且是主持人时，自动开启屏幕共享
@@ -1077,6 +1124,28 @@ export function CustomVideoConference({
       alert(errorMessage);
     }
   }, [localParticipant, isScreenSharing]);
+
+  const toggleCamera = React.useCallback(async () => {
+    if (!localParticipant) {
+      return;
+    }
+
+    try {
+      const shouldEnable = !isLocalCameraEnabled;
+      console.log('🎥 toggleCamera -> shouldEnable', shouldEnable);
+      await localParticipant.setCameraEnabled(shouldEnable);
+      setIsLocalCameraEnabled(shouldEnable);
+      const cameraTrack = localParticipant.getTrackPublication(Track.Source.Camera);
+      console.log('🎥 after toggle, camera track state', {
+        hasTrack: !!cameraTrack,
+        isMuted: cameraTrack?.isMuted,
+        participantEnabled: localParticipant.isCameraEnabled
+      });
+    } catch (error) {
+      console.error('切换摄像头失败:', error);
+      alert('切换摄像头失败: ' + (error as Error).message);
+    }
+  }, [isLocalCameraEnabled, localParticipant]);
   // 主视频显示组件
   const MainVideoDisplayComponent = React.useMemo(() => (
     <MainVideoDisplay
@@ -1135,11 +1204,25 @@ export function CustomVideoConference({
           </button>
           {/* 摄像头按钮 - 只有主持人可用 */}
           <button 
-            className={`control-btn camera-btn ${(userRole || 0) < 2 ? 'disabled' : ''}`}
+            className={`control-btn camera-btn ${(userRole || 0) < 2 ? 'disabled' : ''} ${isLocalCameraEnabled ? 'active' : ''}`}
             disabled={(userRole || 0) < 2}
-            title={`摄像头${(userRole || 0) < 2 ? '（仅主持人可用）' : ''}`}
+            aria-pressed={isLocalCameraEnabled}
+            onClick={(event) => {
+              if ((userRole || 0) < 2) {
+                event.preventDefault();
+                event.stopPropagation();
+                return;
+              }
+              toggleCamera();
+            }}
+            style={{
+              opacity: (userRole || 0) < 2 ? 0.5 : 1,
+              cursor: (userRole || 0) < 2 ? 'not-allowed' : 'pointer',
+              borderColor: isLocalCameraEnabled ? '#4caf50' : undefined
+            }}
+            title={(userRole || 0) < 2 ? '摄像头（仅主持人可用）' : isLocalCameraEnabled ? '关闭摄像头' : '开启摄像头'}
           >
-            📹 摄像头
+            {isLocalCameraEnabled ? '📹 关闭摄像头' : '📷 开启摄像头'}
           </button>
           {/* 申请上麦按钮 - 普通用户 */}
         {userInfo && getCurrentUserRole() < 2 && roomInfo.name && (
@@ -1265,7 +1348,7 @@ export function CustomVideoConference({
         </button>
       </div>
     </div>
-  ), [roomInfo.name, widgetState.showSettings, widgetState.showHostPanel, handleLeaveRoom, userRole, userId, userName, isScreenSharing, toggleScreenShare, toggleHostPanel, localParticipant, isLocalUserDisabled]);
+  ), [roomInfo.name, widgetState.showSettings, widgetState.showHostPanel, handleLeaveRoom, userRole, userId, userName, isScreenSharing, toggleScreenShare, toggleHostPanel, localParticipant, isLocalUserDisabled, isLocalCameraEnabled, toggleCamera]);
   const handleDataReceived = React.useCallback((payload: Uint8Array) => {
     try {
       const text = new TextDecoder().decode(payload).trim();
@@ -2157,13 +2240,20 @@ function MainVideoDisplayNoHost({ roomInfo, tracks, userRole, userId, userName }
   // 仅渲染主持人/管理员的视频（沿用原规则）
   const filteredTracks = React.useMemo(() => {
     const filtered = tracks.filter(track => {
-      const p = track.participant;
-      if (!p) return false;
-      const role = getParticipantRole(p);
+      const participant = track.participant;
+      if (!participant) {
+        return false;
+      }
+
+      if (participant.isLocal) {
+        return true;
+      }
+
+      const role = getParticipantRole(participant);
       return role === 2 || role === 3;
     });
     return filtered;
-  }, [tracks]);
+  }, [tracks, userRole]);
   return (
     <div className="main-video-display">
       <div className="video-content">
@@ -2236,20 +2326,36 @@ function MainVideoDisplay({ roomInfo, tracks, userRole, userId, userName }: Main
   };
   // 过滤tracks，只显示主持人和管理员
   const filteredTracks = React.useMemo(() => {
-    // 麦位过滤日志已清理
+
     const filtered = tracks.filter(track => {
-      // 获取track对应的参与者
+
       const participant = track.participant;
+
       if (!participant) {
+
         return false;
+
       }
-      // 使用LiveKit原生机制获取角色信息
+
+
+
+      if (participant.isLocal) {
+
+        return true;
+
+      }
+
+
+
       const role = getParticipantRole(participant);
-      const isAllowed = role === 2 || role === 3;
-      return isAllowed; // 只显示主持人或管理员
+
+      return role === 2 || role === 3;
+
     });
+
     return filtered;
-  }, [tracks]);
+
+  }, [tracks, userRole]);
   // 🎯 修复：直接使用传入的userRole，与标题栏保持完全一致
   const currentUserIsHost = userRole && (userRole === 2 || userRole === 3);
   // 查找其他主持人参与者 - 使用LiveKit原生机制
@@ -2711,6 +2817,7 @@ function MicParticipantTile({ currentUserRole, onApproveMic, userToken, setDebug
       let payload: any = {
         room_id: room.name,
         host_user_id: hostUid,
+        operator_id: hostUid,
         participant_identity: participant.identity,
         ...additionalData
       };

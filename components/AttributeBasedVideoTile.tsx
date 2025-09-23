@@ -126,7 +126,7 @@ export function AttributeBasedVideoTile({
     }
     
     return baseClasses.join(' ');
-  }, [metadata, size, className]);
+  }, [metadataSource, size, className]);
   
   // 🎨 根据属性计算内联样式
   const computedStyle = React.useMemo(() => {
@@ -176,11 +176,11 @@ export function AttributeBasedVideoTile({
     }
     
     return baseStyle;
-  }, [metadata, size, style, onClick, onDoubleClick]);
+  }, [metadataSource, size, style, onClick, onDoubleClick]);
   
   // 🔄 监听 metadata 事件
   React.useEffect(() => {
-    const handleAttributesChanged = () => {
+    const handleMetadataChanged = () => {
       console.log(`🔄 ${participant.identity} 的属性已更新:`, participant.metadata);
       setForceUpdate(prev => prev + 1);
     };
