@@ -1154,8 +1154,9 @@ export function CustomVideoConference({
       userRole={userRole}
       userId={userId}
       userName={userName}
+      isLocalCameraEnabled={isLocalCameraEnabled}
     />
-  ), [roomInfo, tracks, userRole, userId, userName]);
+  ), [roomInfo, tracks, userRole, userId, userName, isLocalCameraEnabled]);
   // 自定义控制栏
   const CustomControlBar = React.useMemo(() => (
     <div className="custom-control-bar">
@@ -1770,6 +1771,7 @@ export function CustomVideoConference({
                     userRole={userRole}
                     userId={userId}
                     userName={userName}
+                    isLocalCameraEnabled={isLocalCameraEnabled}
                   />
                 </div>
                 {/* 底部控制栏 - 只在左侧区域 */}
@@ -2228,36 +2230,104 @@ interface MainVideoDisplayProps {
   userRole?: number;
   userId?: number;
   userName?: string;
+  isLocalCameraEnabled?: boolean;
 }
+type TrackReference = ReturnType<typeof useTracks>[number];
+
+const CAMERA_TILE_LOG_PREFIX = '📺 [CameraTileDebug]';
+const logCameraTileDecision = (stage: string, detail: Record<string, unknown>) => {
+  if (typeof window === 'undefined') {
+    return;
+  }
+  console.log(`${CAMERA_TILE_LOG_PREFIX} ${stage}`, detail);
+};
+
+const shouldRenderCameraTile = (
+  trackRef: TrackReference,
+  userRole?: number,
+  isLocalCameraEnabled?: boolean,
+) => {
+  const publication = trackRef.publication;
+  const participant = trackRef.participant;
+
+  const publicationSummary = publication
+    ? {
+        trackSid: publication.trackSid,
+        isMuted: publication.isMuted,
+        hasTrack: !!publication.track,
+        isSubscribed:
+          typeof (publication as { isSubscribed?: boolean }).isSubscribed === 'boolean'
+            ? (publication as { isSubscribed: boolean }).isSubscribed
+            : undefined,
+      }
+    : null;
+
+  const participantSummary = participant
+    ? {
+        identity: participant.identity,
+        sid: participant.sid,
+        isLocal: participant.isLocal,
+        cameraEnabled: participant.isCameraEnabled,
+      }
+    : null;
+
+  const baseDetails = {
+    source: trackRef.source,
+    participant: participantSummary,
+    publication: publicationSummary,
+    userRole,
+    isLocalCameraEnabled,
+  };
+
+  logCameraTileDecision('evaluate', baseDetails);
+
+  if (trackRef.source !== Track.Source.Camera) {
+    logCameraTileDecision('skip-non-camera-source', baseDetails);
+    return true;
+  }
+
+  if (!publication) {
+    logCameraTileDecision('skip-no-publication', baseDetails);
+    return false;
+  }
+
+  if (publication.isMuted) {
+    logCameraTileDecision('skip-muted-publication', baseDetails);
+    return false;
+  }
+
+  if (!publication.track) {
+    logCameraTileDecision('skip-missing-track', baseDetails);
+    return false;
+  }
+
+  if (!participant) {
+    logCameraTileDecision('skip-no-participant', baseDetails);
+    return false;
+  }
+
+  if (participant.isLocal && (userRole === 2 || userRole === 3)) {
+    const localCameraActive = isLocalCameraEnabled ?? participant.isCameraEnabled;
+    if (localCameraActive === false) {
+      logCameraTileDecision('skip-local-host-camera-disabled', {
+        ...baseDetails,
+        localCameraActive,
+      });
+      return false;
+    }
+  }
+
+  logCameraTileDecision('render', baseDetails);
+  return true;
+};
 // 简化版本：不再判断“主持人是否在场”，始终渲染会议界面
 function MainVideoDisplayNoHost({ roomInfo, tracks, userRole, userId, userName, isLocalCameraEnabled }: MainVideoDisplayProps) {
-  // 参与者与角色解析
-  const participants = useParticipants();
-  const getParticipantRole = (participant: Participant): number => {
-    const attributes = participant.attributes || {};
-    return parseInt(attributes.role || '1');
-  };
-  // 仅渲染主持人/管理员的视频（沿用原规则）
+  // 收集可用轨道供浮窗渲染
   const filteredTracks = React.useMemo(() => {
-    const filtered = tracks.filter(track => {
-      const participant = track.participant;
-      if (!participant) {
-        return false;
-      }
-
-      if (participant.isLocal) {
-        const allowLocal = userRole === 2 || userRole === 3;
-        if (!allowLocal) {
-          return false;
-        }
-        return isLocalCameraEnabled !== undefined ? isLocalCameraEnabled : participant.isCameraEnabled;
-      }
-
-      const role = getParticipantRole(participant);
-      return role === 2 || role === 3;
+    return tracks.filter(track => {
+      return track.source === Track.Source.Camera || track.source === Track.Source.ScreenShare;
     });
-    return filtered;
-  }, [tracks, userRole, isLocalCameraEnabled]);
+  }, [tracks]);
   return (
     <div className="main-video-display">
       <div className="video-content">
@@ -2270,19 +2340,11 @@ function MainVideoDisplayNoHost({ roomInfo, tracks, userRole, userId, userName, 
           {filteredTracks
             .filter(t => t.source === Track.Source.Camera)
             .map((trackRef, index) => {
-              const participant = trackRef.participant;
-              const attributes = participant.attributes || {};
-              const isHostRole = isHostOrAdmin(attributes);
-              // 主持/管理员未开摄像头则不渲染其浮窗（原行为保留）
-              if (isHostRole) {
-                const videoTrack = participant.getTrackPublication(Track.Source.Camera);
-                const cameraEnabled = !!(
-                  videoTrack &&
-                  videoTrack.track &&
-                  !videoTrack.isMuted &&
-                  participant.isCameraEnabled
-                );
-                if (!cameraEnabled) return null;
+              // 使用统一逻辑判断是否渲染摄像头浮窗
+              const shouldRender = shouldRenderCameraTile(trackRef, userRole, isLocalCameraEnabled);
+
+              if (!shouldRender) {
+                return null;
               }
               return (
                 <FloatingWrapper
@@ -2328,46 +2390,12 @@ function MainVideoDisplay({ roomInfo, tracks, userRole, userId, userName, isLoca
     const role = parseInt(attributes.role || '1');
     return role;
   };
-  // 过滤tracks，只显示主持人和管理员
+  // 收集可用轨道供浮窗渲染
   const filteredTracks = React.useMemo(() => {
-
-    const filtered = tracks.filter(track => {
-
-      const participant = track.participant;
-
-      if (!participant) {
-
-        return false;
-
-      }
-
-
-
-      if (participant.isLocal) {
-
-        const allowLocal = userRole === 2 || userRole === 3;
-
-        if (!allowLocal) {
-
-          return false;
-
-        }
-
-        return isLocalCameraEnabled !== undefined ? isLocalCameraEnabled : participant.isCameraEnabled;
-
-      }
-
-
-
-      const role = getParticipantRole(participant);
-
-      return role === 2 || role === 3;
-
+    return tracks.filter(track => {
+      return track.source === Track.Source.Camera || track.source === Track.Source.ScreenShare;
     });
-
-    return filtered;
-
-  }, [tracks, userRole, isLocalCameraEnabled]);
+  }, [tracks]);
   // 🎯 修复：直接使用传入的userRole，与标题栏保持完全一致
   const currentUserIsHost = userRole && (userRole === 2 || userRole === 3);
   // 查找其他主持人参与者 - 使用LiveKit原生机制
@@ -2415,31 +2443,13 @@ function MainVideoDisplay({ roomInfo, tracks, userRole, userId, userName, isLoca
             {filteredTracks
               .filter(track => track.source === Track.Source.Camera)
               .map((trackRef, index) => {
-                // 🎯 在这里就检查是否应该显示视频框
-                const participant = trackRef.participant;
-                const attributes = participant.attributes || {};
-                const isHostRole = isHostOrAdmin(attributes);
-                // 如果是主持人且摄像头未开启，直接不渲染这个组件
-                if (isHostRole) {
-                  const videoTrack = participant.getTrackPublication(Track.Source.Camera);
-                  const cameraEnabled = !!(
-                    videoTrack && 
-                    videoTrack.track &&
-                    !videoTrack.isMuted && 
-                    participant.isCameraEnabled
-                  );
-                  console.log(`🎯 FloatingWrapper层面检查 ${participant.identity}:`, {
-                    isHost: isHostRole,
-                    cameraEnabled,
-                    shouldRender: cameraEnabled
-                  });
-                  // 主持人摄像头未开启时，直接不渲染整个FloatingWrapper
-                  if (!cameraEnabled) {
-                    console.log(`🙈 完全隐藏主持人 ${participant.identity} 的视频框`);
-                    return null;
-                  }
-                }
-                return (
+              // 使用统一逻辑判断是否渲染摄像头浮窗
+              const shouldRender = shouldRenderCameraTile(trackRef, userRole, isLocalCameraEnabled);
+
+              if (!shouldRender) {
+                return null;
+              }
+              return (
                   <FloatingWrapper
                     key={trackRef.participant.sid + trackRef.source}
                     initialPosition={{ 
