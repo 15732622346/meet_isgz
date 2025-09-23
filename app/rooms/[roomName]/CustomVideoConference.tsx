@@ -2230,7 +2230,7 @@ interface MainVideoDisplayProps {
   userName?: string;
 }
 // 简化版本：不再判断“主持人是否在场”，始终渲染会议界面
-function MainVideoDisplayNoHost({ roomInfo, tracks, userRole, userId, userName }: MainVideoDisplayProps) {
+function MainVideoDisplayNoHost({ roomInfo, tracks, userRole, userId, userName, isLocalCameraEnabled }: MainVideoDisplayProps) {
   // 参与者与角色解析
   const participants = useParticipants();
   const getParticipantRole = (participant: Participant): number => {
@@ -2246,14 +2246,18 @@ function MainVideoDisplayNoHost({ roomInfo, tracks, userRole, userId, userName }
       }
 
       if (participant.isLocal) {
-        return true;
+        const allowLocal = userRole === 2 || userRole === 3;
+        if (!allowLocal) {
+          return false;
+        }
+        return isLocalCameraEnabled !== undefined ? isLocalCameraEnabled : participant.isCameraEnabled;
       }
 
       const role = getParticipantRole(participant);
       return role === 2 || role === 3;
     });
     return filtered;
-  }, [tracks, userRole]);
+  }, [tracks, userRole, isLocalCameraEnabled]);
   return (
     <div className="main-video-display">
       <div className="video-content">
@@ -2316,7 +2320,7 @@ function MainVideoDisplayNoHost({ roomInfo, tracks, userRole, userId, userName }
     </div>
   );
 }
-function MainVideoDisplay({ roomInfo, tracks, userRole, userId, userName }: MainVideoDisplayProps) {
+function MainVideoDisplay({ roomInfo, tracks, userRole, userId, userName, isLocalCameraEnabled }: MainVideoDisplayProps) {
   const participants = useParticipants();
   // 🎯 在组件内部定义getParticipantRole函数
   const getParticipantRole = (participant: Participant): number => {
@@ -2341,7 +2345,15 @@ function MainVideoDisplay({ roomInfo, tracks, userRole, userId, userName }: Main
 
       if (participant.isLocal) {
 
-        return true;
+        const allowLocal = userRole === 2 || userRole === 3;
+
+        if (!allowLocal) {
+
+          return false;
+
+        }
+
+        return isLocalCameraEnabled !== undefined ? isLocalCameraEnabled : participant.isCameraEnabled;
 
       }
 
@@ -2355,7 +2367,7 @@ function MainVideoDisplay({ roomInfo, tracks, userRole, userId, userName }: Main
 
     return filtered;
 
-  }, [tracks, userRole]);
+  }, [tracks, userRole, isLocalCameraEnabled]);
   // 🎯 修复：直接使用传入的userRole，与标题栏保持完全一致
   const currentUserIsHost = userRole && (userRole === 2 || userRole === 3);
   // 查找其他主持人参与者 - 使用LiveKit原生机制

@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import Image from 'next/image';
+import { resolveAssetPath } from '@/lib/assetPath';
 
 interface FloatingWrapperProps {
   children: React.ReactNode;
@@ -288,8 +289,8 @@ export function FloatingWrapper({
                 title={displayState === VideoDisplayState.MAXIMIZED ? '还原' : '最大化'}
               >
                 {displayState === VideoDisplayState.MAXIMIZED ? 
-                  <Image src="/images/small.png" width={16} height={16} alt="还原" /> : 
-                  <Image src="/images/big.png" width={16} height={16} alt="最大化" />
+                  <Image src={resolveAssetPath('/images/small.png')}  width={16} height={16} alt="还原" /> : 
+                  <Image src={resolveAssetPath('/images/big.png')}  width={16} height={16} alt="最大化" />
                 }
               </button>
             </div>
