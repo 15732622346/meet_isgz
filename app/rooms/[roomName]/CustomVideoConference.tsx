@@ -42,6 +42,7 @@ import { useConferenceControls } from './hooks/useConferenceControls';
 import { useRoomManagement } from './hooks/useRoomManagement';
 import { MainVideoDisplay, MainVideoDisplayNoHost } from './components/conference/MainVideoDisplay';
 import { MicParticipantList } from './components/conference/MicManagement';
+import { extractParticipantUid } from './utils/conference-utils';
 import { API_CONFIG } from '@/lib/config';
 import { callGatewayApi, normalizeGatewayResponse } from '@/lib/api-client';
 import { resolveAssetPath } from '@/lib/assetPath';
@@ -198,6 +199,34 @@ export function CustomVideoConference({
   const toggleChatMenu = React.useCallback(() => {
     setShowChatMenu(prev => !prev);
   }, []);
+  const collectBatchMicTargets = React.useCallback((): number[] => {
+    if (!participants || participants.length === 0) {
+      return [];
+    }
+
+    const operatorUid = userInfo?.uid;
+    const uniqueUids: number[] = [];
+    const seen = new Set<number>();
+
+    participants.forEach(participant => {
+      const targetUid = extractParticipantUid(participant);
+      if (!targetUid) {
+        return;
+      }
+      if (operatorUid && targetUid === operatorUid) {
+        return;
+      }
+      if (isHostOrAdmin(getParticipantMetadataSource(participant))) {
+        return;
+      }
+      if (!seen.has(targetUid)) {
+        seen.add(targetUid);
+        uniqueUids.push(targetUid);
+      }
+    });
+
+    return uniqueUids;
+  }, [participants, userInfo?.uid]);
   const sanitizedUserName = React.useMemo(() => {
     if (typeof userName === 'string') {
       const trimmed = userName.trim();
@@ -286,55 +315,81 @@ export function CustomVideoConference({
     });
   }, [performLogout, clearUserInfo, roomCtx, userInfo?.jwt_token]);
   // 麦克风管理函数 - 改为调用后台API
-  const handleToggleMicMute = React.useCallback(async () => {
-    if (!roomCtx || (userRole !== 2 && userRole !== 3)) return;
-    try {
-      const newMuteState = !micGlobalMute;
-      const action = newMuteState ? 'mute_all' : 'unmute_all';
-      // 🎯 调用后台API进行批量操作
-      const response = await fetch('/admin/batch-mic-control.php', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          roomName: roomInfo.name,
-          action: action,
-          token: userToken,
-          operatorRole: userRole
-        })
-      });
-      const result = await response.json();
-      if (result.success) {
-        // 更新本地状态
-        setMicGlobalMute(newMuteState);
-        setWidgetState(prev => ({ ...prev, showMicMenu: false }));
-        // 显示操作结果
-        if (result.affected_count > 0) {
-          alert(`✅ ${result.message}\n影响用户数: ${result.affected_count}`);
-        } else {
-          alert(`ℹ️ ${result.message}`);
-        }
-      } else {
-        throw new Error(result.message);
+  const performBatchMicControl = React.useCallback(
+    async (mute: boolean) => {
+      if (!roomCtx || !roomInfo?.name || (userRole !== 2 && userRole !== 3)) {
+        return;
       }
-    } catch (error) {
-      console.error('❌ 批量麦克风控制失败:', error);
-      const errorMessage = error instanceof Error ? error.message : '网络错误';
-      alert(`❌ 操作失败: ${errorMessage}`);
-    }
-  }, [roomCtx, userRole, roomInfo?.name, userToken, micGlobalMute]);
-  // 保持原有的两个函数用于兼容性，但内部调用切换函数
+
+      const operatorUid = userInfo?.uid;
+      if (!operatorUid) {
+        alert('缺少主持人 UID，无法执行操作');
+        return;
+      }
+
+      const targetUids = collectBatchMicTargets();
+      if (targetUids.length === 0) {
+        alert('没有可操作的参会人');
+        return;
+      }
+
+      try {
+        const token = await resolveGatewayToken();
+        const endpoint = await API_CONFIG.getEndpoint('gateway_participants_batch_microphone');
+        const payload = {
+          room_id: roomInfo.name,
+          host_user_id: operatorUid,
+          operator_id: operatorUid,
+          user_uids: targetUids,
+          action: mute ? 'mute' : 'unmute',
+          mute_status: mute,
+          ...(mute
+            ? { mute_time: new Date().toISOString() }
+            : { unmute_time: new Date().toISOString() }),
+        };
+
+        const response = await callGatewayApi(endpoint, payload, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        const normalized = normalizeGatewayResponse(response);
+        if (!normalized.success) {
+          const errorMessage = normalized.message || normalized.error || '批量麦克风操作失败';
+          throw new Error(errorMessage);
+        }
+
+        setMicGlobalMute(mute);
+        setWidgetState(prev => ({ ...prev, showMicMenu: false }));
+
+        const actionLabel = mute ? '全员禁麦' : '恢复全员发言';
+        const affected = (normalized.payload as any)?.affected_count;
+        if (typeof affected === 'number' && affected >= 0) {
+          alert(`✅ ${actionLabel}成功，影响人数：${affected}`);
+        } else {
+          alert(`✅ ${actionLabel}操作成功`);
+        }
+      } catch (error) {
+        console.error('批量麦克风操作失败:', error);
+        const errorMessage = error instanceof Error ? error.message : '网络错误';
+        alert(`❌ 操作失败: ${errorMessage}`);
+      }
+    },
+    [roomCtx, roomInfo?.name, userRole, userInfo?.uid, collectBatchMicTargets, resolveGatewayToken],
+  );
+  // 全员禁麦/恢复发言入口，内部调用批量控制函数
   const handleMuteAll = React.useCallback(() => {
-    if (!micGlobalMute) { // 只有在未禁麦时才执行
-      handleToggleMicMute();
+    if (!micGlobalMute) {
+      void performBatchMicControl(true);
     }
-  }, [micGlobalMute, handleToggleMicMute]);
+  }, [micGlobalMute, performBatchMicControl]);
   const handleUnmuteAll = React.useCallback(() => {
-    if (micGlobalMute) { // 只有在已禁麦时才执行
-      handleToggleMicMute();
+    if (micGlobalMute) {
+      void performBatchMicControl(false);
     }
-  }, [micGlobalMute, handleToggleMicMute]);
+  }, [micGlobalMute, performBatchMicControl]);
   // 点击外部关闭菜单
   React.useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
