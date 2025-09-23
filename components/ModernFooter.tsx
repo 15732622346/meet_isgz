@@ -376,7 +376,7 @@ export function ModernFooter({
               (!isMicAvailable ? 
                 (micGlobalMute && !participantState.canManageRoom ? '已启用全员禁麦' : 
                  participantState.micStatus === 'muted' ? '您已被主持人禁麦' : '需要申请麦克风权限') : 
-                (localParticipant?.isMicrophoneEnabled ? '静音' : '取消静音')
+                (localParticipant?.isMicrophoneEnabled ? '点我闭麦' : '点我开麦')
               )
           }
         >

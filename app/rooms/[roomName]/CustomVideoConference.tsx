@@ -198,6 +198,36 @@ export function CustomVideoConference({
   const toggleChatMenu = React.useCallback(() => {
     setShowChatMenu(prev => !prev);
   }, []);
+  const sanitizedUserName = React.useMemo(() => {
+    if (typeof userName === 'string') {
+      const trimmed = userName.trim();
+      if (trimmed.length > 0) {
+        return trimmed;
+      }
+    }
+    return 'User';
+  }, [userName]);
+  const userRoleLabel = React.useMemo(() => {
+    if (userRole === 3) {
+      return '管理员';
+    }
+    if (userRole === 2) {
+      return '主持人';
+    }
+    if (userRole === 0) {
+      return '游客';
+    }
+    return '普通会员';
+  }, [userRole]);
+  const permissionSegments = React.useMemo(() => {
+    if (userRole === 3 || userRole === 2) {
+      return ['摄像头✅', '麦克风✅', '共享✅', '控麦✅'];
+    }
+    return ['摄像头❌', '麦克风⚠️', '共享❌', '控麦❌'];
+  }, [userRole]);
+  const userStatusLine = React.useMemo(() => {
+    return [sanitizedUserName, userRoleLabel, ...permissionSegments].join('  ');
+  }, [sanitizedUserName, userRoleLabel, permissionSegments]);
   const handleGlobalMuteChat = React.useCallback(() => {
     if (!roomCtx || (userRole !== 2 && userRole !== 3)) return;
     try {
@@ -1227,16 +1257,7 @@ export function CustomVideoConference({
                     <span className="user-avatar">
                       {userRole === 3 ? '👑' : userRole === 2 ? '🎤' : '👤'}
                     </span>
-                    <span className="user-name">{userName || 'User'}</span>
-                    <span className="user-role">
-                      {userRole === 3 ? '管理员' : userRole === 2 ? '主持人' : userRole === 0 ? '游客' : '普通会员'}
-                    </span>
-                    <span className="user-permissions">
-                      {userRole === 3 || userRole === 2 
-                        ? '摄像头✅ 麦克风✅ 共享✅ 控麦✅' 
-                        : '摄像头❌ 麦克风⚠️ 共享❌'
-                      }
-                    </span>
+                    <span className="user-name user-status-line" style={{ whiteSpace: 'pre' }}>{userStatusLine}</span>
                   </div>
                 </div>
                 {/* 主视频显示区域 */}

@@ -73,31 +73,15 @@ export function MicParticipantList({ currentUserRole, currentUserName, roomInfo,
       alert(`❌ 批准失败: ${(error as Error).message}`);
     }
   };
-  // 🎯 过滤麦位列表参与者
-  const micListParticipants = React.useMemo(() => {
-    return [...allParticipants]
-      .filter(participant => {
-        return shouldShowInMicList(getParticipantMetadataSource(participant));
-      })
-      .sort((a, b) => {
-        const roleA = getParticipantRole(a);
-        const roleB = getParticipantRole(b);
-        return roleB - roleA; // 角色值大的排前面
-      });
-  }, [allParticipants]);
-  // 🎯 使用官方ParticipantLoop组件
+
+  // 🎯 获取需要显示在麦位列表中的参与者
+  const micListParticipants = allParticipants.filter(p => shouldShowInMicList(getParticipantMetadataSource(p)));
+
   return (
-    <div className="participants-list" style={{ 
-      height: '100%', 
-      overflow: 'auto',
-      padding: '8px'
-    }}>
-      <h4 style={{ color: '#fff', margin: '0 0 12px 0', fontSize: '14px' }}>
-        {`麦位列表 (${micListParticipants.length}/${maxMicSlots ?? "--"})`}
-      </h4>
+    <div className="mic-participant-list">
       {micListParticipants.length > 0 ? (
         <ParticipantLoop participants={micListParticipants}>
-          <MicParticipantTile 
+          <MicParticipantTile
             currentUserRole={currentUserRole}
             onApproveMic={handleApproveMic}
             userToken={userToken}
@@ -106,9 +90,9 @@ export function MicParticipantList({ currentUserRole, currentUserName, roomInfo,
           />
         </ParticipantLoop>
       ) : (
-        <div style={{ 
-          color: '#888', 
-          textAlign: 'center', 
+        <div style={{
+          color: '#888',
+          textAlign: 'center',
           padding: '20px',
           fontSize: '12px'
         }}>
