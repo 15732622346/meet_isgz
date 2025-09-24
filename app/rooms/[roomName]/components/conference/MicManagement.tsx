@@ -18,7 +18,7 @@ import {
 import type { MicListProps, MicParticipantTileProps } from '../../types/conference-types';
 import { extractParticipantUid } from '../../utils/conference-utils';
 
-export function MicParticipantList({ currentUserRole, currentUserName, roomInfo, userToken, maxMicSlots, setDebugInfo }: MicListProps) {
+export function MicParticipantList({ currentUserRole, currentUserName, roomInfo, userToken, hostUserId, maxMicSlots, setDebugInfo }: MicListProps) {
   const { resolveGatewayToken, userInfo } = useUserContext();
   const allParticipants = useParticipants();
   // 🎯 LiveKit原生角色获取函数
@@ -75,7 +75,33 @@ export function MicParticipantList({ currentUserRole, currentUserName, roomInfo,
   };
 
   // 🎯 获取需要显示在麦位列表中的参与者
-  const micListParticipants = allParticipants.filter(p => shouldShowInMicList(getParticipantMetadataSource(p)));
+  const micListParticipants = React.useMemo(() => {
+    const visibleParticipants = allParticipants.filter(participant =>
+      shouldShowInMicList(getParticipantMetadataSource(participant))
+    );
+
+    if (!hostUserId) {
+      return visibleParticipants;
+    }
+
+    const hostAlreadyVisible = visibleParticipants.some(participant =>
+      extractParticipantUid(participant) === hostUserId
+    );
+
+    if (hostAlreadyVisible) {
+      return visibleParticipants;
+    }
+
+    const hostParticipant = allParticipants.find(participant =>
+      extractParticipantUid(participant) === hostUserId
+    );
+
+    if (!hostParticipant) {
+      return visibleParticipants;
+    }
+
+    return [hostParticipant, ...visibleParticipants];
+  }, [allParticipants, hostUserId]);
 
   return (
     <div className="mic-participant-list">

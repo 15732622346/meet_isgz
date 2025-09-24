@@ -48,6 +48,7 @@ export interface MicListProps {
   currentUserName?: string;
   roomInfo?: { name: string };
   userToken?: string;
+  hostUserId?: number;
   jwtToken?: string;
   maxMicSlots?: number;
   setDebugInfo?: (updater: (prev: string) => string) => void;

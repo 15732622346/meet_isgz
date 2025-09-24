@@ -1459,6 +1459,7 @@ export function CustomVideoConference({
                         currentUserName={userName}
                         roomInfo={roomInfo}
                         userToken={userToken}
+                        hostUserId={hostUserId}
                         maxMicSlots={roomDetails?.maxMicSlots}
                         setDebugInfo={setDebugInfo}
                       />
