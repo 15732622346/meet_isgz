@@ -149,10 +149,29 @@ export function CustomVideoConference({
   const maxMicSlots = roomDetails?.maxMicSlots;
   const maxMicSlotsLabel = maxMicSlots !== undefined ? String(maxMicSlots) : '--';
   const micListCount = React.useMemo(() => {
-    return participants.filter(participant =>
+    const visibleParticipants = participants.filter(participant =>
       shouldShowInMicList(getParticipantMetadataSource(participant)),
-    ).length;
-  }, [participants]);
+    );
+
+    if (!hostUserId) {
+      return visibleParticipants.length;
+    }
+
+    const hostUid = hostUserId;
+    const hostAlreadyVisible = visibleParticipants.some(participant =>
+      extractParticipantUid(participant) === hostUid
+    );
+
+    if (hostAlreadyVisible) {
+      return visibleParticipants.length;
+    }
+
+    const hostExists = participants.some(participant =>
+      extractParticipantUid(participant) === hostUid
+    );
+
+    return hostExists ? visibleParticipants.length + 1 : visibleParticipants.length;
+  }, [participants, hostUserId]);
   const requestingMicCount = React.useMemo(() => {
     return participants.filter(participant =>
       isRequestingMic(getParticipantMetadataSource(participant)),
@@ -1345,6 +1364,7 @@ export function CustomVideoConference({
                     room={roomCtx}
                     roomDetails={roomDetails}
                     currentUserRole={userRole}
+                    hostUserId={hostUserId}
                   />
                 </div>
               </div>

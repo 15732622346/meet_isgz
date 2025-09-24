@@ -76,8 +76,8 @@ export function MainVideoDisplayNoHost({
                 <FloatingWrapper
                   key={trackRef.participant?.sid ? `${trackRef.participant.sid}${trackRef.source}` : String(index)}
                   initialPosition={{ x: 100 + index * 50, y: 100 + index * 50 }}
-                  width={320}
-                  height={240}
+                  width={180}
+                  height={170}
                 >
                   <TrackRefContext.Provider value={trackRef}>
                     <AttributeBasedVideoTile
@@ -179,8 +179,8 @@ export function MainVideoDisplay({
                   <FloatingWrapper
                     key={trackRef.participant?.sid ? `${trackRef.participant.sid}${trackRef.source}` : String(index)}
                     initialPosition={{ x: 100 + index * 50, y: 100 + index * 50 }}
-                    width={320}
-                    height={240}
+                    width={180}
+                    height={170}
                   >
                     <TrackRefContext.Provider value={trackRef}>
                       <AttributeBasedVideoTile

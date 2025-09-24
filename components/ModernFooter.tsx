@@ -4,9 +4,10 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useLocalParticipant, useParticipants, useRoomInfo } from '@livekit/components-react';
 import { callGatewayApi, normalizeGatewayResponse } from '@/lib/api-client';
 import { parseParticipantMetadata, shouldShowInMicList, isOnMic, isRequestingMic, isHostOrAdmin, getParticipantMetadataSource } from '@/lib/token-utils';
+import { extractParticipantUid } from '@/app/rooms/[roomName]/utils/conference-utils';
 
 // 🎯 纯 Participant 状态管理的 Hook
-const useParticipantState = (roomDetails?: { maxMicSlots?: number } | null, roleOverride?: number) => {
+const useParticipantState = (roomDetails?: { maxMicSlots?: number } | null, roleOverride?: number, hostUserId?: number) => {
   const { localParticipant } = useLocalParticipant();
   const participants = useParticipants();
   const roomInfo = useRoomInfo();
@@ -82,10 +83,21 @@ const useParticipantState = (roomDetails?: { maxMicSlots?: number } | null, role
       return false;
     })();
 
-    const micListCount = participants.filter(p => shouldShowInMicList(getParticipantMetadataSource(p))).length;
+    const visibleParticipants = participants.filter(p =>
+      shouldShowInMicList(getParticipantMetadataSource(p))
+    );
+    const hostExists =
+      hostUserId !== undefined &&
+      participants.some(p => extractParticipantUid(p) === hostUserId);
+    const hostVisible =
+      hostExists &&
+      visibleParticipants.some(p => extractParticipantUid(p) === hostUserId);
+    const micListCount =
+      visibleParticipants.length + (hostExists && !hostVisible ? 1 : 0);
     const onMicCount = participants.filter(p => isOnMic(getParticipantMetadataSource(p))).length;
     const requestingCount = participants.filter(p => isRequestingMic(getParticipantMetadataSource(p))).length;
-    const hasHost = participants.some(p => isHostOrAdmin(getParticipantMetadataSource(p)));
+    const hasHost =
+      hostExists || participants.some(p => isHostOrAdmin(getParticipantMetadataSource(p)));
     const maxSlots = roomDetails?.maxMicSlots;
 
     const micStats = {
@@ -116,7 +128,7 @@ const useParticipantState = (roomDetails?: { maxMicSlots?: number } | null, role
       participantMeta,
       permissions: localParticipant?.permissions,
     };
-  }, [localParticipant?.metadata, localParticipant?.attributes, localParticipant?.permissions, participants, roomDetails, roleOverride]);
+  }, [localParticipant?.metadata, localParticipant?.attributes, localParticipant?.permissions, participants, roomDetails, roleOverride, hostUserId]);
 
 };
 
@@ -140,6 +152,7 @@ interface ModernFooterProps {
   onLeaveRoom: () => void;
   onMicStatusChange: (status: string) => void;
   currentUserRole?: number;
+  hostUserId?: number;
   room?: any; // LiveKit Room 对象
   roomDetails?: {
     maxMicSlots?: number;
@@ -164,12 +177,13 @@ export function ModernFooter({
   room,
   roomDetails,
   currentUserRole,
+  hostUserId,
 }: ModernFooterProps) {
   const { localParticipant } = useLocalParticipant();
   const roomInfo = useRoomInfo();
 
   // 🎯 使用纯 Participant 状态管理
-  const participantState = useParticipantState(roomDetails, currentUserRole);
+  const participantState = useParticipantState(roomDetails, currentUserRole, hostUserId);
   const [micRequestLoading, setMicRequestLoading] = useState(false);
 
   const maxMicSlotsLabel = participantState.micStats.maxSlots !== undefined
