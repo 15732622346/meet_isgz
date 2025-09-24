@@ -304,35 +304,62 @@ export function CustomVideoConference({
       console.error('全员禁言广播失败:', error);
     }
   }, [roomCtx, userRole, chatGlobalMute, localParticipant]);
+  const hasLeftRef = React.useRef(false);
+
+  const leaveRoom = React.useCallback(async () => {
+    if (hasLeftRef.current) {
+      return;
+    }
+    hasLeftRef.current = true;
+
+    try {
+      if (userInfo?.jwt_token) {
+        await performLogout();
+      } else {
+        clearUserInfo();
+      }
+    } catch (error) {
+      console.error('退出登录失败:', error);
+      clearUserInfo();
+    } finally {
+      try {
+        await roomCtx?.disconnect();
+      } catch (disconnectError) {
+        console.error('断开房间失败:', disconnectError);
+      }
+    }
+  }, [performLogout, clearUserInfo, roomCtx, userInfo?.jwt_token]);
+
   const handleLeaveRoom = React.useCallback(() => {
     if (!confirm('确定要离开会议吗？')) {
       return;
     }
 
-    const logoutAndLeave = async () => {
-      try {
-        if (userInfo?.jwt_token) {
-          await performLogout();
-        } else {
-          clearUserInfo();
-        }
-      } catch (error) {
-        console.error('退出登录失败:', error);
-        clearUserInfo();
-      } finally {
-        try {
-          await roomCtx?.disconnect();
-        } catch (disconnectError) {
-          console.error('断开房间失败:', disconnectError);
-        }
+    leaveRoom()
+      .then(() => {
         window.location.reload();
-      }
+      })
+      .catch(error => {
+        console.error('离开会议流程异常:', error);
+      });
+  }, [leaveRoom]);
+
+  React.useEffect(() => {
+    const handleBeforeUnload = () => {
+      leaveRoom().catch(error => {
+        console.error('beforeunload 离开会议失败:', error);
+      });
     };
 
-    logoutAndLeave().catch(error => {
-      console.error('处理退出流程时出现未捕获的错误:', error);
-    });
-  }, [performLogout, clearUserInfo, roomCtx, userInfo?.jwt_token]);
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      leaveRoom().catch(error => {
+        console.error('组件卸载离开会议失败:', error);
+      });
+    };
+  }, [leaveRoom]);
   // 麦克风管理函数 - 改为调用后台API
   const performBatchMicControl = React.useCallback(
     async (mute: boolean) => {

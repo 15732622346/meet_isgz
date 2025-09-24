@@ -31,13 +31,6 @@ const shouldRenderCameraTile = (
     return false;
   }
 
-  if (participant.isLocal && (userRole === 2 || userRole === 3)) {
-    const localCameraActive = isLocalCameraEnabled ?? participant.isCameraEnabled;
-    if (localCameraActive === false) {
-      return false;
-    }
-  }
-
   return true;
 };
 
@@ -72,10 +65,23 @@ export function MainVideoDisplayNoHost({
               if (!shouldRender) {
                 return null;
               }
+
+                const leftMargin = 24;
+                const tileHeight = 170;
+                const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : undefined;
+                const initialYBase =
+                  viewportHeight !== undefined
+                    ? Math.max(leftMargin, viewportHeight - tileHeight - 85)
+                    : leftMargin;
+                const initialPosition = {
+                  x: leftMargin,
+                  y: Math.max(leftMargin, initialYBase - index * (tileHeight + leftMargin)),
+                };
+
               return (
                 <FloatingWrapper
                   key={trackRef.participant?.sid ? `${trackRef.participant.sid}${trackRef.source}` : String(index)}
-                  initialPosition={{ x: 100 + index * 50, y: 100 + index * 50 }}
+                  initialPosition={initialPosition}
                   width={180}
                   height={170}
                 >
@@ -175,10 +181,23 @@ export function MainVideoDisplay({
                 if (!shouldRender) {
                   return null;
                 }
+
+                  const leftMargin = 24;
+                  const tileHeight = 170;
+                  const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : undefined;
+                  const initialYBase =
+                    viewportHeight !== undefined
+                      ? Math.max(leftMargin, viewportHeight - tileHeight - 85)
+                      : leftMargin;
+                  const initialPosition = {
+                    x: leftMargin,
+                    y: Math.max(leftMargin, initialYBase - index * (tileHeight + leftMargin)),
+                  };
+
                 return (
                   <FloatingWrapper
                     key={trackRef.participant?.sid ? `${trackRef.participant.sid}${trackRef.source}` : String(index)}
-                    initialPosition={{ x: 100 + index * 50, y: 100 + index * 50 }}
+                    initialPosition={initialPosition}
                     width={180}
                     height={170}
                   >
