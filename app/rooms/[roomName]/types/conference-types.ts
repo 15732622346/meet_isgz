@@ -58,6 +58,7 @@ export interface MicParticipantTileProps {
   currentUserRole?: number;
   onApproveMic: (participant: Participant) => void;
   userToken?: string;
+  hostUserId?: number;
   jwtToken?: string;
   setDebugInfo?: (updater: (prev: string) => string) => void;
   currentUserName?: string;

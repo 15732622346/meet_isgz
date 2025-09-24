@@ -111,6 +111,7 @@ export function MicParticipantList({ currentUserRole, currentUserName, roomInfo,
             currentUserRole={currentUserRole}
             onApproveMic={handleApproveMic}
             userToken={userToken}
+            hostUserId={hostUserId}
             setDebugInfo={setDebugInfo}
             currentUserName={currentUserName}
           />
@@ -129,7 +130,7 @@ export function MicParticipantList({ currentUserRole, currentUserName, roomInfo,
   );
 }
 
-function MicParticipantTile({ currentUserRole, onApproveMic, userToken, setDebugInfo, currentUserName }: MicParticipantTileProps) {
+function MicParticipantTile({ currentUserRole, onApproveMic, userToken, hostUserId, setDebugInfo, currentUserName }: MicParticipantTileProps) {
   const { resolveGatewayToken, userInfo } = useUserContext();
   const participant = React.useContext(ParticipantContext);
   const [showControlMenu, setShowControlMenu] = React.useState(false);
@@ -156,10 +157,13 @@ function MicParticipantTile({ currentUserRole, onApproveMic, userToken, setDebug
   };
   const participantMetadataSource = getParticipantMetadataSource(participant);
   const participantStatus = parseParticipantMetadata(participantMetadataSource);
-  const role = parseInt(participantStatus.role || '1', 10);
+  const participantUid = extractParticipantUid(participant);
+  const isFallbackHost = hostUserId !== undefined && participantUid === hostUserId;
+  const role = isFallbackHost ? 2 : parseInt(participantStatus.role || '1', 10);
   const roleText = role === 3 ? '管理员' : role === 2 ? '主持人' : role === 0 ? '游客' : '普通会员';
-  const micStatusText = getMicStatusText(participantMetadataSource);
-  const micStatusIcon = getMicStatusIcon(participantStatus);
+  const micStatusText = isFallbackHost ? '' : getMicStatusText(participantMetadataSource);
+  const micStatusIcon = isFallbackHost ? resolveAssetPath('/images/mic.png') : getMicStatusIcon(participantStatus);
+  const roleAndStatusText = micStatusText ? `${roleText} - ${micStatusText}` : roleText;
   const isHost = currentUserRole === 2 || currentUserRole === 3;
   const isTargetMember = role === 1;
   // 🎯 判断当前参与者是否是自己
@@ -379,7 +383,7 @@ function MicParticipantTile({ currentUserRole, onApproveMic, userToken, setDebug
           <ParticipantName />
         </div>
         <div style={{ fontSize: '11px', color: '#888' }}>
-          {roleText} - {micStatusText}
+          {roleAndStatusText}
         </div>
       </div>
       {/* 麦克风状态图标 - 移到中间 */}
