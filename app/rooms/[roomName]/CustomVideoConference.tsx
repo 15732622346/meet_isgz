@@ -1247,44 +1247,24 @@ export function CustomVideoConference({
   // 监听 LiveKit 断线并自动处理
   React.useEffect(() => {
     if (!roomCtx) return;
-    const handleDisconnected = async (reason?: any) => {
-      // 自动清除session，不再显示确认对话框
+    const handleDisconnected = async () => {
       try {
-        await API_CONFIG.load();
-        const baseUrl = API_CONFIG.BASE_URL;
-        if (!baseUrl) {
-          console.warn('Gateway base URL 未配置，跳过 clear-session 调用');
-          return;
-        }
-
-        const normalizedBaseUrl = baseUrl.replace(/\/+$/, '');
-        const response = await fetch(`${normalizedBaseUrl}/clear-session.php`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            user_id: userId,
-            user_name: userName
-          }),
-        });
-        if (response.ok) {
-          const result = await response.json();
-
-        } else {
-          console.warn('Failed to clear session:', response.status);
-        }
+        await leaveRoom();
       } catch (error) {
-        console.error('Error clearing session:', error);
+        console.error('自动离开会议失败:', error);
+      } finally {
+        try {
+          router.replace(`/rooms/${encodeURIComponent(roomName)}`);
+        } catch (navigationError) {
+          console.error('导航回登录页失败:', navigationError);
+        }
       }
-      // 直接刷新页面回到房间登录页
-      window.location.reload();
     };
     roomCtx.on(RoomEvent.Disconnected, handleDisconnected);
     return () => {
       roomCtx.off(RoomEvent.Disconnected, handleDisconnected);
     };
-  }, [roomCtx, userId, userName]);
+  }, [roomCtx, leaveRoom, router, roomName]);
   // 初始化时检查用户是否被禁用
   React.useEffect(() => {
     if (localParticipant?.attributes?.isDisabledUser === 'true') {

@@ -110,7 +110,6 @@ export function UserProvider({ children }: UserProviderProps) {
   const lastRefreshAtRef = useRef<number | null>(null);
   const cancelScheduledRefresh = useCallback(() => {
     if (refreshTimerRef.current !== null) {
-      console.debug('知否知否: cancel scheduled refresh timer', { timerId: refreshTimerRef.current });
       if (typeof window !== 'undefined') {
         window.clearTimeout(refreshTimerRef.current);
       } else {
@@ -164,14 +163,12 @@ export function UserProvider({ children }: UserProviderProps) {
 
     const now = Date.now();
     if (forceRefresh) {
-      console.debug('知否知否: resolveGatewayToken invoked with forceRefresh');
     }
     let accessExpiresAt = Number(userInfo.access_expires_at || 0);
 
     if (!Number.isFinite(accessExpiresAt) || accessExpiresAt <= 0) {
       const fallbackExpiry = getJwtExpiry(userInfo.access_token || userInfo.jwt_token);
       if (fallbackExpiry) {
-        console.debug('知否知否: derived fallback access expiry', { fallbackExpiry });
         accessExpiresAt = fallbackExpiry;
         setUserInfo({
           ...userInfo,
@@ -183,38 +180,24 @@ export function UserProvider({ children }: UserProviderProps) {
     }
 
     if (!forceRefresh && accessExpiresAt > now + 5 * 60 * 1000) {
-      console.debug('知否知否: token still valid, skip refresh', { accessExpiresAt, now });
       return userInfo.access_token || userInfo.jwt_token;
     }
 
     if (!userInfo.refresh_token) {
-      console.debug('知否知否: no refresh token available, return current access token');
       return userInfo.access_token || userInfo.jwt_token;
     }
 
     if (refreshPromiseRef.current) {
-      console.debug('知否知否: reusing in-flight refresh promise');
       return refreshPromiseRef.current;
     }
 
     const refreshPromise = async (): Promise<string> => {
       try {
         const startedAt = Date.now();
-        console.debug('知否知否: begin refresh call', {
-          startedAt,
-          endpoint: '/api/v1/auth/refresh',
-          hasRefreshToken: Boolean(userInfo.refresh_token),
-        });
-
         const response = await callGatewayApi<any>('/api/v1/auth/refresh', {
           refresh_token: userInfo.refresh_token
         }, {
           method: 'POST'
-        });
-
-        console.debug('知否知否: refresh call completed', {
-          durationMs: Date.now() - startedAt,
-          success: response?.success !== false,
         });
 
         if (!response || response.success === false) {
@@ -291,11 +274,6 @@ export function UserProvider({ children }: UserProviderProps) {
         const resolvedRefreshExpiresAt =
           computedRefreshExpiresAt ?? getJwtExpiry(refreshToken);
 
-        console.debug('知否知否: refresh resolved payload', {
-          accessTokenExpiresAt: resolvedAccessExpiresAt,
-          refreshTokenExpiresAt: resolvedRefreshExpiresAt,
-          hasRefreshToken: Boolean(refreshToken || userInfo.refresh_token),
-        });
 
         const updatedUserInfo = {
           ...userInfo,
@@ -310,10 +288,7 @@ export function UserProvider({ children }: UserProviderProps) {
 
         const completedAt = Date.now();
         lastRefreshAtRef.current = completedAt;
-        console.debug('知否知否: refresh promise resolved', {
-          completedAt,
-          elapsedMs: completedAt - startedAt,
-        });
+
 
         return accessToken;
       } catch (error) {
@@ -325,7 +300,6 @@ export function UserProvider({ children }: UserProviderProps) {
       }
     };
 
-    console.debug('知否知否: refresh promise scheduled');
     refreshPromiseRef.current = refreshPromise();
     return refreshPromiseRef.current;
   };
@@ -344,7 +318,6 @@ export function UserProvider({ children }: UserProviderProps) {
     cancelScheduledRefresh();
 
     if (!userInfo?.refresh_token) {
-      console.debug('知否知否: skip scheduling, missing refresh_token');
       return;
     }
 
@@ -358,7 +331,6 @@ export function UserProvider({ children }: UserProviderProps) {
     }
 
     if (accessExpiresAt === undefined) {
-      console.debug('知否知否: skip scheduling, unable to resolve access expiry');
       return;
     }
 
@@ -368,25 +340,18 @@ export function UserProvider({ children }: UserProviderProps) {
     const invokeRefresh = () => {
       const resolver = resolveGatewayTokenRef.current;
       if (!resolver) {
-        console.debug('知否知否: timer fired but resolver missing');
         return;
       }
       const firedAt = Date.now();
       const previousRefreshAt = lastRefreshAtRef.current;
-      console.debug('知否知否: timer firing refresh', {
-        firedAt,
-        previousRefreshAt,
-        sinceLastMs: previousRefreshAt !== null ? firedAt - previousRefreshAt : null,
-        scheduledDelayMs: Math.max(delay, 0),
-        originalDelayMs: delay,
-      });
+
       resolver({ forceRefresh: true }).catch(error => {
-        console.error('知否知否: 定时刷新 token 失败', error);
+        console.error('定时刷新 token 失败', error);
       });
     };
 
     if (delay <= 0) {
-      console.debug('知否知否: timer immediately invoking refresh', {
+      console.debug('timer immediately invoking refresh', {
         accessExpiresAt,
         safetyWindowMs,
         now,
@@ -398,14 +363,7 @@ export function UserProvider({ children }: UserProviderProps) {
     }
 
     refreshTimerRef.current = window.setTimeout(invokeRefresh, delay);
-    console.debug('知否知否: scheduled refresh timer', {
-      accessExpiresAt,
-      safetyWindowMs,
-      triggerAt,
-      triggerAtIso: new Date(triggerAt).toISOString(),
-      delayMs: delay,
-      delayMinutes: Number((delay / 60000).toFixed(2)),
-    });
+
 
     return cancelScheduledRefresh;
   }, [
@@ -437,7 +395,6 @@ export function UserProvider({ children }: UserProviderProps) {
   };
 
   const clearUserInfo = () => {
-    console.debug('知否知否: clearing user info, cancel timer');
     cancelScheduledRefresh();
     lastRefreshAtRef.current = null;
     setUserInfo(null);
