@@ -111,7 +111,11 @@ const DEFAULT_ENDPOINTS: Record<string, string> = {
   gateway_participants_batch_microphone: '/api/v1/participants/batch-set-microphone',
 };
 
-const RUNTIME_CONFIG_URL = process.env.NEXT_PUBLIC_API_CONFIG_URL || '/config/api-config.json';
+const RUNTIME_CONFIG_URL = (() => {
+  const configured = process.env.NEXT_PUBLIC_API_CONFIG_URL?.trim();
+  return configured && configured.length > 0 ? configured : null;
+})();
+
 
 type RawApiConfig = {
   BASE_URL?: string;
@@ -186,6 +190,11 @@ const resolveEndpoint = (endpoint: string): string => {
 
 const loadRuntimeApiConfig = async (force = false): Promise<void> => {
   if (typeof window === 'undefined') {
+    apiConfigLoaded = true;
+    return;
+  }
+
+  if (!RUNTIME_CONFIG_URL) {
     apiConfigLoaded = true;
     return;
   }
