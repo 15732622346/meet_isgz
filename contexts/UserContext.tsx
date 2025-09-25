@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, ReactNode, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useRef, useCallback } from 'react';
 import { callGatewayApi } from '@/lib/api-client';
 import { getJwtExpiry } from '@/lib/token-utils';
 
@@ -24,13 +24,17 @@ interface UserContextValue {
   userInfo: UserInfo | null;
   setUserInfo: (info: UserInfo | null) => void;
   getCurrentUserRole: () => number;
-  resolveGatewayToken: () => Promise<string>;
+  resolveGatewayToken: (options?: ResolveGatewayTokenOptions) => Promise<string>;
   performLogout: () => Promise<void>;
   clearUserInfo: () => void;
   inviteCode: string | null;
   setInviteCode: (code: string | null) => void;
   isLoggedIn: boolean;
   isGuest: boolean;
+}
+
+interface ResolveGatewayTokenOptions {
+  forceRefresh?: boolean;
 }
 
 const UserContext = createContext<UserContextValue | undefined>(undefined);
@@ -102,6 +106,19 @@ export function UserProvider({ children }: UserProviderProps) {
   const [userInfo, setUserInfoState] = useState<UserInfo | null>(null);
   const [inviteCode, setInviteCodeState] = useState<string | null>(null);
   const refreshPromiseRef = useRef<Promise<string> | null>(null);
+  const refreshTimerRef = useRef<number | null>(null);
+  const lastRefreshAtRef = useRef<number | null>(null);
+  const cancelScheduledRefresh = useCallback(() => {
+    if (refreshTimerRef.current !== null) {
+      console.debug('知否知否: cancel scheduled refresh timer', { timerId: refreshTimerRef.current });
+      if (typeof window !== 'undefined') {
+        window.clearTimeout(refreshTimerRef.current);
+      } else {
+        clearTimeout(refreshTimerRef.current);
+      }
+      refreshTimerRef.current = null;
+    }
+  }, []);
 
   const updateInviteCode = (code: string | null) => {
     const normalized = code ?? null;
@@ -136,48 +153,68 @@ export function UserProvider({ children }: UserProviderProps) {
   };
 
   // Token自动刷新机制
-  const resolveGatewayToken = async (): Promise<string> => {
+  const resolveGatewayToken = async (
+    options?: ResolveGatewayTokenOptions,
+  ): Promise<string> => {
     if (!userInfo) {
       throw new Error('用户未登录');
     }
 
+    const forceRefresh = options?.forceRefresh === true;
+
     const now = Date.now();
+    if (forceRefresh) {
+      console.debug('知否知否: resolveGatewayToken invoked with forceRefresh');
+    }
     let accessExpiresAt = Number(userInfo.access_expires_at || 0);
 
     if (!Number.isFinite(accessExpiresAt) || accessExpiresAt <= 0) {
       const fallbackExpiry = getJwtExpiry(userInfo.access_token || userInfo.jwt_token);
       if (fallbackExpiry) {
+        console.debug('知否知否: derived fallback access expiry', { fallbackExpiry });
         accessExpiresAt = fallbackExpiry;
         setUserInfo({
           ...userInfo,
           access_expires_at: fallbackExpiry,
         });
-      } else {
+      } else if (!forceRefresh) {
         return userInfo.access_token || userInfo.jwt_token;
       }
     }
 
-    // 如果access token还有5分钟以上有效期，直接返回
-    if (accessExpiresAt > now + 5 * 60 * 1000) {
+    if (!forceRefresh && accessExpiresAt > now + 5 * 60 * 1000) {
+      console.debug('知否知否: token still valid, skip refresh', { accessExpiresAt, now });
       return userInfo.access_token || userInfo.jwt_token;
     }
 
-    // 如果没有refresh token，返回现有token（游客模式）
     if (!userInfo.refresh_token) {
+      console.debug('知否知否: no refresh token available, return current access token');
       return userInfo.access_token || userInfo.jwt_token;
     }
 
-    // 防止并发刷新
     if (refreshPromiseRef.current) {
+      console.debug('知否知否: reusing in-flight refresh promise');
       return refreshPromiseRef.current;
     }
 
     const refreshPromise = async (): Promise<string> => {
       try {
+        const startedAt = Date.now();
+        console.debug('知否知否: begin refresh call', {
+          startedAt,
+          endpoint: '/api/v1/auth/refresh',
+          hasRefreshToken: Boolean(userInfo.refresh_token),
+        });
+
         const response = await callGatewayApi<any>('/api/v1/auth/refresh', {
           refresh_token: userInfo.refresh_token
         }, {
           method: 'POST'
+        });
+
+        console.debug('知否知否: refresh call completed', {
+          durationMs: Date.now() - startedAt,
+          success: response?.success !== false,
         });
 
         if (!response || response.success === false) {
@@ -254,6 +291,12 @@ export function UserProvider({ children }: UserProviderProps) {
         const resolvedRefreshExpiresAt =
           computedRefreshExpiresAt ?? getJwtExpiry(refreshToken);
 
+        console.debug('知否知否: refresh resolved payload', {
+          accessTokenExpiresAt: resolvedAccessExpiresAt,
+          refreshTokenExpiresAt: resolvedRefreshExpiresAt,
+          hasRefreshToken: Boolean(refreshToken || userInfo.refresh_token),
+        });
+
         const updatedUserInfo = {
           ...userInfo,
           access_token: accessToken,
@@ -265,10 +308,16 @@ export function UserProvider({ children }: UserProviderProps) {
 
         setUserInfo(updatedUserInfo);
 
+        const completedAt = Date.now();
+        lastRefreshAtRef.current = completedAt;
+        console.debug('知否知否: refresh promise resolved', {
+          completedAt,
+          elapsedMs: completedAt - startedAt,
+        });
+
         return accessToken;
       } catch (error) {
         console.error('Token刷新失败:', error);
-        // 刷新失败，清理用户状态
         clearUserInfo();
         throw new Error('Token过期，请重新登录');
       } finally {
@@ -276,12 +325,97 @@ export function UserProvider({ children }: UserProviderProps) {
       }
     };
 
-
+    console.debug('知否知否: refresh promise scheduled');
     refreshPromiseRef.current = refreshPromise();
     return refreshPromiseRef.current;
   };
 
-  // 登出功能
+  const resolveGatewayTokenRef = useRef(resolveGatewayToken);
+
+  useEffect(() => {
+    resolveGatewayTokenRef.current = resolveGatewayToken;
+  }, [resolveGatewayToken]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    cancelScheduledRefresh();
+
+    if (!userInfo?.refresh_token) {
+      console.debug('知否知否: skip scheduling, missing refresh_token');
+      return;
+    }
+
+    const safetyWindowMs = 5 * 60 * 1000;
+    const now = Date.now();
+
+    let accessExpiresAt = normalizeTimestamp(userInfo.access_expires_at);
+    if (accessExpiresAt === undefined) {
+      const fallbackToken = userInfo.access_token || userInfo.jwt_token;
+      accessExpiresAt = getJwtExpiry(fallbackToken);
+    }
+
+    if (accessExpiresAt === undefined) {
+      console.debug('知否知否: skip scheduling, unable to resolve access expiry');
+      return;
+    }
+
+    const triggerAt = accessExpiresAt - safetyWindowMs;
+    const delay = triggerAt - now;
+
+    const invokeRefresh = () => {
+      const resolver = resolveGatewayTokenRef.current;
+      if (!resolver) {
+        console.debug('知否知否: timer fired but resolver missing');
+        return;
+      }
+      const firedAt = Date.now();
+      const previousRefreshAt = lastRefreshAtRef.current;
+      console.debug('知否知否: timer firing refresh', {
+        firedAt,
+        previousRefreshAt,
+        sinceLastMs: previousRefreshAt !== null ? firedAt - previousRefreshAt : null,
+        scheduledDelayMs: Math.max(delay, 0),
+        originalDelayMs: delay,
+      });
+      resolver({ forceRefresh: true }).catch(error => {
+        console.error('知否知否: 定时刷新 token 失败', error);
+      });
+    };
+
+    if (delay <= 0) {
+      console.debug('知否知否: timer immediately invoking refresh', {
+        accessExpiresAt,
+        safetyWindowMs,
+        now,
+        triggerAt: accessExpiresAt - safetyWindowMs,
+        triggerAtIso: new Date(accessExpiresAt - safetyWindowMs).toISOString(),
+      });
+      invokeRefresh();
+      return;
+    }
+
+    refreshTimerRef.current = window.setTimeout(invokeRefresh, delay);
+    console.debug('知否知否: scheduled refresh timer', {
+      accessExpiresAt,
+      safetyWindowMs,
+      triggerAt,
+      triggerAtIso: new Date(triggerAt).toISOString(),
+      delayMs: delay,
+      delayMinutes: Number((delay / 60000).toFixed(2)),
+    });
+
+    return cancelScheduledRefresh;
+  }, [
+    userInfo?.access_expires_at,
+    userInfo?.access_token,
+    userInfo?.jwt_token,
+    userInfo?.refresh_token,
+    cancelScheduledRefresh,
+  ]);
+
   const performLogout = async (): Promise<void> => {
     try {
       if (userInfo?.jwt_token) {
@@ -303,6 +437,9 @@ export function UserProvider({ children }: UserProviderProps) {
   };
 
   const clearUserInfo = () => {
+    console.debug('知否知否: clearing user info, cancel timer');
+    cancelScheduledRefresh();
+    lastRefreshAtRef.current = null;
     setUserInfo(null);
     setInviteCodeState(null);
     // 清理本地存储
