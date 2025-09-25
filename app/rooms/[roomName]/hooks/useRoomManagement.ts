@@ -242,7 +242,15 @@ export function useRoomManagement({
           setDebugInfo(prev => prev + '   未提供 userToken，将使用 Session 认证\n');
         }
 
-        const response = await fetch(`${API_CONFIG.BASE_URL}/api/update-participant.php`, {
+        await API_CONFIG.load();
+        const baseUrl = API_CONFIG.BASE_URL;
+        if (!baseUrl) {
+          setDebugInfo(prev => prev + '   ⚠️ Gateway 基础地址未配置，跳过属性更新\n');
+          return;
+        }
+
+        const normalizedBaseUrl = baseUrl.replace(/\/+$/, '');
+        const response = await fetch(`${normalizedBaseUrl}/api/update-participant.php`, {
           method: 'POST',
           headers,
           credentials: 'include',

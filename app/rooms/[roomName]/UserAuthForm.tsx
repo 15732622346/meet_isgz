@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { API_CONFIG, getApiUrl } from '@/lib/config';
+import { API_CONFIG } from '@/lib/config';
 import { callGatewayApi, normalizeGatewayResponse } from '@/lib/api-client';
 import { useUser } from '@/contexts/UserContext';
 import { getJwtExpiry } from '@/lib/token-utils';

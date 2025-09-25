@@ -3,6 +3,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useLocalParticipant, useParticipants, useRoomInfo } from '@livekit/components-react';
 import { callGatewayApi, normalizeGatewayResponse } from '@/lib/api-client';
+import { useUserContext } from '@/contexts/UserContext';
 import { parseParticipantMetadata, shouldShowInMicList, isOnMic, isRequestingMic, isHostOrAdmin, getParticipantMetadataSource } from '@/lib/token-utils';
 import { extractParticipantUid } from '@/app/rooms/[roomName]/utils/conference-utils';
 
@@ -181,6 +182,7 @@ export function ModernFooter({
 }: ModernFooterProps) {
   const { localParticipant } = useLocalParticipant();
   const roomInfo = useRoomInfo();
+  const { resolveGatewayToken, userInfo } = useUserContext();
 
   // 🎯 使用纯 Participant 状态管理
   const participantState = useParticipantState(roomDetails, currentUserRole, hostUserId);
@@ -254,24 +256,36 @@ export function ModernFooter({
       return;
     }
 
-    if (!jwtToken || !userId) {
-      alert('未检测到登录信息，请重新登录后再试');
-      return;
-    }
-
     setMicRequestLoading(true);
     try {
+      const resolvedUserId = userId ?? userInfo?.uid;
+      if (!resolvedUserId) {
+        throw new Error('未检测到登录信息，请重新登录后再试');
+      }
+
+      let authToken: string | undefined;
+      try {
+        authToken = await resolveGatewayToken();
+      } catch (tokenError) {
+        console.warn('resolveGatewayToken failed, falling back to initial JWT', tokenError);
+        authToken = jwtToken;
+      }
+
+      if (!authToken) {
+        throw new Error('未检测到登录信息，请重新登录后再试');
+      }
+
       const response = await callGatewayApi<{ success?: boolean; message?: string; error?: string }>(
         '/api/v1/participants/request-microphone',
         {
           room_id: targetRoomName,
-          user_uid: userId,
+          user_uid: resolvedUserId,
           action: 'raise_hand',
         },
         {
           method: 'POST',
           headers: {
-            Authorization: `Bearer ${jwtToken}`,
+            Authorization: `Bearer ${authToken}`,
           },
         },
       );

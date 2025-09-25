@@ -1,0 +1,20 @@
+﻿{
+  "BASE_URL": "https://met.pge006.com",
+  "ENDPOINTS": {
+    "ROOM_INFO": "/api/v1/rooms/detail",
+    "UPDATE_PARTICIPANT": "/api/update-participant.php",
+    "ADMIN_CONTROL_PARTICIPANTS": "/admin-control-participants.php",
+    "CHECK_BLOCKED_WORDS": "/api/check-blocked-words.php",
+    "CLEAR_SESSION": "/clear-session.php",
+    "GATEWAY_AUTH_STATUS": "/api/v1/auth/status",
+    "GATEWAY_ROOMS_DETAIL": "/api/v1/rooms/detail",
+    "GATEWAY_AUTH_LOGIN": "/api/v1/auth/login",
+    "GATEWAY_AUTH_REGISTER": "/api/v1/auth/register",
+    "gateway_auth_logout": "/api/v1/auth/logout",
+    "gateway_auth_refresh": "/api/v1/auth/refresh",
+    "gateway_participants_request_microphone": "/api/v1/participants/request-microphone",
+    "gateway_participants_grant_publish": "/api/v1/participants/grant-publish",
+    "gateway_participants_kick_mic": "/api/v1/participants/kick-mic",
+    "gateway_participants_batch_microphone": "/api/v1/participants/batch-set-microphone"
+  }
+}

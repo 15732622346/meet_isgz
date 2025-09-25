@@ -328,7 +328,13 @@ export function CustomVideoConference({
         console.error('断开房间失败:', disconnectError);
       }
     }
-  }, [performLogout, clearUserInfo, roomCtx, userInfo?.jwt_token]);
+  }, [performLogout, clearUserInfo, roomCtx]);
+
+  const leaveRoomRef = React.useRef(leaveRoom);
+
+  React.useEffect(() => {
+    leaveRoomRef.current = leaveRoom;
+  }, [leaveRoom]);
 
   const handleLeaveRoom = React.useCallback(() => {
     if (!confirm('确定要离开会议吗？')) {
@@ -345,21 +351,26 @@ export function CustomVideoConference({
   }, [leaveRoom]);
 
   React.useEffect(() => {
+    const safeLeaveRoom = () => {
+      const promise = leaveRoomRef.current();
+      if (promise && typeof promise.catch === 'function') {
+        promise.catch(error => {
+          console.error('离开会议失败:', error);
+        });
+      }
+    };
+
     const handleBeforeUnload = () => {
-      leaveRoom().catch(error => {
-        console.error('beforeunload 离开会议失败:', error);
-      });
+      safeLeaveRoom();
     };
 
     window.addEventListener('beforeunload', handleBeforeUnload);
 
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
-      leaveRoom().catch(error => {
-        console.error('组件卸载离开会议失败:', error);
-      });
+      safeLeaveRoom();
     };
-  }, [leaveRoom]);
+  }, []);
   // 麦克风管理函数 - 改为调用后台API
   const performBatchMicControl = React.useCallback(
     async (mute: boolean) => {
@@ -613,7 +624,15 @@ export function CustomVideoConference({
   // 检查消息是否包含屏蔽词
   const checkBlockedWords = async (message: string): Promise<{blocked: boolean, word?: string}> => {
     try {
-      const apiUrl = `${API_CONFIG.BASE_URL}/api/check-blocked-words.php`;
+      await API_CONFIG.load();
+      const baseUrl = API_CONFIG.BASE_URL;
+      if (!baseUrl) {
+        console.warn('Gateway base URL 未配置，跳过屏蔽词检查');
+        return { blocked: false };
+      }
+
+      const normalizedBaseUrl = baseUrl.replace(/\/+$/, '');
+      const apiUrl = `${normalizedBaseUrl}/api/check-blocked-words.php`;
       const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
@@ -1231,8 +1250,15 @@ export function CustomVideoConference({
     const handleDisconnected = async (reason?: any) => {
       // 自动清除session，不再显示确认对话框
       try {
-        // 调用后端清除session接口
-        const response = await fetch(`${API_CONFIG.BASE_URL}/clear-session.php`, {
+        await API_CONFIG.load();
+        const baseUrl = API_CONFIG.BASE_URL;
+        if (!baseUrl) {
+          console.warn('Gateway base URL 未配置，跳过 clear-session 调用');
+          return;
+        }
+
+        const normalizedBaseUrl = baseUrl.replace(/\/+$/, '');
+        const response = await fetch(`${normalizedBaseUrl}/clear-session.php`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

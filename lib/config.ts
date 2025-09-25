@@ -88,7 +88,8 @@ export function getEnvironment() {
 }
 
 // API_CONFIG ?? - ??API?????????
-const API_ENDPOINTS: Record<string, string> = {
+const DEFAULT_GATEWAY_BASE_URL = config.gateway.baseUrl;
+const DEFAULT_ENDPOINTS: Record<string, string> = {
   ROOM_INFO: '/api/v1/rooms/detail',
   UPDATE_PARTICIPANT: '/api/update-participant.php',
   ADMIN_CONTROL_PARTICIPANTS: '/admin-control-participants.php',
@@ -110,25 +111,136 @@ const API_ENDPOINTS: Record<string, string> = {
   gateway_participants_batch_microphone: '/api/v1/participants/batch-set-microphone',
 };
 
-export const API_CONFIG = {
-  BASE_URL: config.gateway.baseUrl,
-  ENDPOINTS: API_ENDPOINTS,
-  getLiveKitUrl: async (): Promise<string> => config.livekit.wsUrl,
-  getEndpoint: (endpoint: string): string => {
-    if (!endpoint) {
-      return endpoint;
+const RUNTIME_CONFIG_URL = process.env.NEXT_PUBLIC_API_CONFIG_URL || '/config/api-config.json';
+
+type RawApiConfig = {
+  BASE_URL?: string;
+  baseUrl?: string;
+  base_url?: string;
+  ENDPOINTS?: Record<string, unknown>;
+  endpoints?: Record<string, unknown>;
+};
+
+let runtimeBaseUrl = DEFAULT_GATEWAY_BASE_URL;
+let runtimeEndpoints: Record<string, string> = { ...DEFAULT_ENDPOINTS };
+let apiConfigLoaded = false;
+let apiConfigPromise: Promise<void> | null = null;
+
+const normalizeEndpointMap = (input?: Record<string, unknown>): Record<string, string> => {
+  if (!input) {
+    return {};
+  }
+
+  const normalized: Record<string, string> = {};
+
+  Object.entries(input).forEach(([key, rawValue]) => {
+    if (typeof rawValue !== 'string' || !key) {
+      return;
     }
-    if (API_ENDPOINTS[endpoint]) {
-      return API_ENDPOINTS[endpoint];
+
+    normalized[key] = rawValue;
+    const upperKey = key.toUpperCase();
+    if (!(upperKey in normalized)) {
+      normalized[upperKey] = rawValue;
     }
-    const upperKey = endpoint.toUpperCase();
-    if (API_ENDPOINTS[upperKey]) {
-      return API_ENDPOINTS[upperKey];
-    }
+  });
+
+  return normalized;
+};
+
+const applyRuntimeConfig = (raw?: RawApiConfig) => {
+  if (!raw || typeof raw !== 'object') {
+    return;
+  }
+
+  const baseUrlCandidate = raw.BASE_URL ?? raw.baseUrl ?? raw.base_url;
+  if (typeof baseUrlCandidate === 'string' && baseUrlCandidate.trim().length > 0) {
+    runtimeBaseUrl = baseUrlCandidate.trim();
+  }
+
+  const endpointsCandidate = (raw.ENDPOINTS ?? raw.endpoints) as Record<string, unknown> | undefined;
+  if (endpointsCandidate && typeof endpointsCandidate === 'object') {
+    runtimeEndpoints = {
+      ...runtimeEndpoints,
+      ...normalizeEndpointMap(endpointsCandidate),
+    };
+  }
+};
+
+const resolveEndpoint = (endpoint: string): string => {
+  if (!endpoint) {
     return endpoint;
+  }
+
+  if (runtimeEndpoints[endpoint]) {
+    return runtimeEndpoints[endpoint];
+  }
+
+  const upperKey = endpoint.toUpperCase();
+  if (runtimeEndpoints[upperKey]) {
+    return runtimeEndpoints[upperKey];
+  }
+
+  return endpoint;
+};
+
+const loadRuntimeApiConfig = async (force = false): Promise<void> => {
+  if (typeof window === 'undefined') {
+    apiConfigLoaded = true;
+    return;
+  }
+
+  if (apiConfigLoaded && !force) {
+    return;
+  }
+
+  if (apiConfigPromise && !force) {
+    return apiConfigPromise;
+  }
+
+  apiConfigPromise = (async () => {
+    try {
+      const response = await fetch(RUNTIME_CONFIG_URL, { cache: 'no-store' });
+      if (!response.ok) {
+        throw new Error(`Failed to load API config: ${response.status}`);
+      }
+
+      const payload = (await response.json()) as RawApiConfig;
+      applyRuntimeConfig(payload);
+    } catch (error) {
+      console.warn('Failed to load runtime API config', error);
+    } finally {
+      apiConfigLoaded = true;
+      apiConfigPromise = null;
+    }
+  })();
+
+  return apiConfigPromise;
+};
+
+export const API_CONFIG = {
+  get BASE_URL(): string {
+    return runtimeBaseUrl;
+  },
+  get ENDPOINTS(): Record<string, string> {
+    return { ...runtimeEndpoints };
+  },
+  getLiveKitUrl: async (): Promise<string> => config.livekit.wsUrl,
+  load: (force = false) => loadRuntimeApiConfig(force),
+  async getEndpoint(endpoint: string): Promise<string> {
+    await loadRuntimeApiConfig();
+    return resolveEndpoint(endpoint);
+  },
+  getEndpointSync(endpoint: string): string {
+    return resolveEndpoint(endpoint);
+  },
+  async getBaseUrl(): Promise<string> {
+    await loadRuntimeApiConfig();
+    return runtimeBaseUrl;
   },
 };
 
-export function getApiUrl(path: string): string {
-  return `${config.gateway.baseUrl}${path}`;
+export async function getApiUrl(path: string): Promise<string> {
+  await loadRuntimeApiConfig();
+  return `${runtimeBaseUrl}${path}`;
 }

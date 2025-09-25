@@ -302,8 +302,15 @@ function MicParticipantTile({ currentUserRole, onApproveMic, userToken, hostUser
           setDebugInfo(prev => prev + `  ⚠️ 没有userToken，将依赖Session认证\n`);
         }
       }
+      await API_CONFIG.load();
+      const baseUrl = API_CONFIG.BASE_URL;
+      if (!baseUrl) {
+        throw new Error('未配置 Gateway 基础地址');
+      }
+
+      const normalizedBaseUrl = baseUrl.replace(/\/+$/, '');
       // 🔧 修复：调用正确的API来真正控制参与者
-      const response = await fetch(`${API_CONFIG.BASE_URL}/admin-control-participants.php`, {
+      const response = await fetch(`${normalizedBaseUrl}/admin-control-participants.php`, {
         method: 'POST',
         headers,
         credentials: 'include', // 🔧 修复：携带Session Cookie

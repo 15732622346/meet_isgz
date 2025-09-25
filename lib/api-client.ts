@@ -1,9 +1,29 @@
-﻿'use client';
+'use client';
+
+import { API_CONFIG } from '@/lib/config';
 
 // Gateway API 閰嶇疆
-const GATEWAY_BASE_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || '';
+const DEFAULT_GATEWAY_BASE_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || '';
 const GATEWAY_API_KEY = process.env.NEXT_PUBLIC_GATEWAY_API_KEY || '';
 const GATEWAY_API_SECRET = process.env.NEXT_PUBLIC_GATEWAY_API_SECRET || '';
+
+const trimTrailingSlashes = (value: string): string => value.replace(/\/+$/, '');
+
+const resolveGatewayBaseUrl = async (preferredBaseUrl?: string): Promise<string> => {
+  const candidate = preferredBaseUrl?.trim();
+  if (candidate) {
+    return trimTrailingSlashes(candidate);
+  }
+
+  await API_CONFIG.load();
+
+  const runtimeBaseUrl = API_CONFIG.BASE_URL || DEFAULT_GATEWAY_BASE_URL;
+  if (!runtimeBaseUrl) {
+    throw new Error('Gateway base URL is not configured');
+  }
+
+  return trimTrailingSlashes(runtimeBaseUrl);
+};
 
 interface ApiResponse<T = any> {
   success: boolean;
@@ -49,10 +69,10 @@ interface RegisterRequest {
 }
 
 class ApiClient {
-  private baseUrl: string;
+  private baseUrl?: string;
 
-  constructor(baseUrl: string = GATEWAY_BASE_URL) {
-    this.baseUrl = baseUrl;
+  constructor(baseUrl?: string) {
+    this.baseUrl = baseUrl?.trim();
   }
 
   private async request<T>(
@@ -60,7 +80,8 @@ class ApiClient {
     options: RequestInit = {}
   ): Promise<ApiResponse<T>> {
     try {
-      const url = `${this.baseUrl}/gateway?api=${endpoint}`;
+      const baseUrl = await resolveGatewayBaseUrl(this.baseUrl);
+      const url = `${baseUrl}/gateway?api=${endpoint}`;
 
       const response = await fetch(url, {
         headers: {
@@ -263,7 +284,8 @@ export async function callGatewayApi<T = any>(
       finalOptions = dataOrOptions || {};
     }
 
-    const url = `${GATEWAY_BASE_URL}/gateway?api=${endpoint}${queryParams}`;
+    const baseUrl = await resolveGatewayBaseUrl();
+    const url = `${baseUrl}/gateway?api=${endpoint}${queryParams}`;
 
     const headers = new Headers(finalOptions.headers as HeadersInit | undefined);
     headers.set('Content-Type', 'application/json');
@@ -295,4 +317,6 @@ export async function callGatewayApi<T = any>(
     };
   }
 }
+
+
 
