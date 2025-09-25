@@ -1646,7 +1646,9 @@ export function CustomVideoConference({
                       boxSizing: 'border-box'
                     }}>
                       {/* LiveKit Chat组件 - 始终挂载 */}
-                      <Chat messageFormatter={chatMessageFormatter} />
+                      <div className="custom-chat-panel">
+                        <Chat messageFormatter={chatMessageFormatter} />
+                      </div>
                     </div>
                   </div>
                   {/* Footer：输入表单区域 - 高度与ModernFooter保持一致 */}
