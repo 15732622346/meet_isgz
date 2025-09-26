@@ -380,6 +380,7 @@ export function UserProvider({ children }: UserProviderProps) {
         // 调用后端登出接口
         await callGatewayApi('/api/v1/auth/logout', {}, {
           method: 'POST',
+          keepalive: true,
           headers: {
             Authorization: `Bearer ${userInfo.jwt_token}`
           }

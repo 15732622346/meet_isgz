@@ -4,8 +4,6 @@ import { API_CONFIG } from '@/lib/config';
 
 // Gateway API 閰嶇疆
 const DEFAULT_GATEWAY_BASE_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || '';
-const GATEWAY_API_KEY = process.env.NEXT_PUBLIC_GATEWAY_API_KEY || '';
-const GATEWAY_API_SECRET = process.env.NEXT_PUBLIC_GATEWAY_API_SECRET || '';
 
 const trimTrailingSlashes = (value: string): string => value.replace(/\/+$/, '');
 
@@ -289,14 +287,6 @@ export async function callGatewayApi<T = any>(
 
     const headers = new Headers(finalOptions.headers as HeadersInit | undefined);
     headers.set('Content-Type', 'application/json');
-
-    if (GATEWAY_API_KEY && !headers.has('X-API-Key')) {
-      headers.set('X-API-Key', GATEWAY_API_KEY);
-    }
-
-    if (GATEWAY_API_SECRET && !headers.has('X-API-Secret')) {
-      headers.set('X-API-Secret', GATEWAY_API_SECRET);
-    }
 
     const response = await fetch(url, {
       ...finalOptions,
