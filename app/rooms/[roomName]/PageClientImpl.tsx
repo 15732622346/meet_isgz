@@ -714,6 +714,9 @@ function VideoConferenceComponent(props: VideoConferenceComponentProps) {
         )
         .catch(error => {
           console.error('连接 LiveKit 房间失败', error);
+          if (error.message.includes('Client initiated disconnect')) {
+            return;
+          }
           setDeviceError(`连接会议失败: ${error.message}`);
         });
 
