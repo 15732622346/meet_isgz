@@ -341,13 +341,9 @@ export function CustomVideoConference({
       return;
     }
 
-    leaveRoom()
-      .then(() => {
-        window.location.reload();
-      })
-      .catch(error => {
-        console.error('离开会议流程异常:', error);
-      });
+    leaveRoom().catch(error => {
+      console.error('离开会议流程异常:', error);
+    });
   }, [leaveRoom]);
 
   React.useEffect(() => {
