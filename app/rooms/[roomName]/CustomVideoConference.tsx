@@ -1,10 +1,9 @@
-'use client';
+﻿'use client';
 import * as React from 'react';
 import {
   GridLayout,
   ParticipantTile,
   RoomAudioRenderer,
-  Chat,
   ControlBar,
   LayoutContextProvider,
   ParticipantName,
@@ -22,11 +21,10 @@ import {
   useLocalParticipant,
   useRoomInfo,
   useRoomContext,
-  useChat,
   useRemoteParticipant,
 } from '@livekit/components-react';
 import { Track, Participant, RoomEvent, RemoteParticipant, DataPacket_Kind, AudioPresets } from 'livekit-client';
-import type { MessageFormatter, WidgetState as BaseWidgetState } from '@livekit/components-react';
+import type { WidgetState as BaseWidgetState } from '@livekit/components-react';
 import { useRouter } from 'next/navigation';
 import { useState, useEffect, useRef } from 'react';
 import { MicRequestButton } from '../../../components/MicRequestButton';
@@ -37,6 +35,7 @@ import { DebugPanel } from '../../../components/DebugPanel';
 import { AudioShareHelper } from '../../../components/AudioShareHelper';
 import { AttributeBasedVideoTile } from '../../../components/AttributeBasedVideoTile';
 import { HideLiveKitCounters } from '../../../components/HideLiveKitCounters';
+import { CustomChatPanel, type CustomChatMessage } from './components/CustomChatPanel';
 import type { CustomVideoConferenceProps, CustomWidgetState } from './types/conference-types';
 import { useConferenceControls } from './hooks/useConferenceControls';
 import { useRoomManagement } from './hooks/useRoomManagement';
@@ -64,7 +63,6 @@ import {
 } from '../../../lib/token-utils';
 
 export function CustomVideoConference({
-  chatMessageFormatter,
   SettingsComponent,
   userRole,
   userName,
@@ -93,6 +91,16 @@ export function CustomVideoConference({
   const [chatGlobalMute, setChatGlobalMute] = React.useState(true); // 修改为true，默认不能发言
   const [micGlobalMute, setMicGlobalMute] = React.useState(false);
   const [isChatTogglePending, setIsChatTogglePending] = React.useState(false);
+  const [chatMessages, setChatMessages] = React.useState<CustomChatMessage[]>([]);
+  const chatMessageKeysRef = React.useRef(new Set<string>());
+  const pendingSelfMessagesRef = React.useRef<Array<{ content: string; createdAt: number }>>([]);
+  const [isSendingChatMessage, setIsSendingChatMessage] = React.useState(false);
+  const [chatValidationMessage, setChatValidationMessage] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    return () => {
+      chatMessageKeysRef.current.clear();
+    };
+  }, []);
   // 移除“主持人在场”判断逻辑
   // 添加isLocalUserDisabled状态来追踪用户禁用状态
   const [isLocalUserDisabled, setIsLocalUserDisabled] = React.useState(false);
@@ -103,14 +111,58 @@ export function CustomVideoConference({
   const lastSentTimeRef = React.useRef<number>(0);
   const MESSAGE_COOLDOWN = 2000; // 两秒冷却时间（毫秒）
   const isSendingMessageRef = React.useRef(false);
+  const generateMessageId = React.useCallback(() => {
+    const cryptoApi = typeof globalThis !== 'undefined' ? globalThis.crypto : undefined;
+    if (cryptoApi?.randomUUID) {
+      return cryptoApi.randomUUID();
+    }
+    return `msg-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
+  }, []);
+  const ensureChatVisible = React.useCallback(() => {
+    setWidgetState(prev => {
+      if (prev.showChat) {
+        if (prev.unreadMessages === 0) {
+          return prev;
+        }
+        return { ...prev, unreadMessages: 0 };
+      }
+      return { ...prev, showChat: true, unreadMessages: 0 };
+    });
+  }, [setWidgetState]);
+  const appendChatMessage = React.useCallback(
+    (message: CustomChatMessage, dedupeKey?: string | number | null) => {
+      const keyCandidate =
+        dedupeKey !== undefined && dedupeKey !== null && dedupeKey !== ''
+          ? dedupeKey
+          : message.id;
+      if (!keyCandidate) {
+        return;
+      }
+      const storeKey =
+        typeof keyCandidate === 'string' ? keyCandidate : String(keyCandidate);
+      if (chatMessageKeysRef.current.has(storeKey)) {
+        return;
+      }
+      chatMessageKeysRef.current.add(storeKey);
+      setChatMessages(prev => [...prev, message]);
+      setWidgetState(prev => {
+        if (prev.showChat || message.isSelf) {
+          if (prev.unreadMessages === 0) {
+            return prev;
+          }
+          return { ...prev, unreadMessages: 0 };
+        }
+        return { ...prev, unreadMessages: prev.unreadMessages + 1 };
+      });
+    },
+    [setWidgetState],
+  );
   // 🎯 新增：房间详情信息管理
   // 游客点击处理函数 - 定义移到useEffect之前
-  const guestClickHandler = React.useCallback((e: Event) => {
-    e.preventDefault();
-    e.stopPropagation();
-    // 使用 confirm 对话框，让用户选择是否前往注册登录
-    if (confirm(`游客必须注册为会员才能使用发送消息功能，是否前往注册登录？`)) {
-      // 用户选择"是" - 刷新页面，跳转到登录页面
+  const guestClickHandler = React.useCallback((event?: Event) => {
+    event?.preventDefault();
+    event?.stopPropagation();
+    if (confirm('游客必须注册为会员才能使用发送消息功能，是否前往注册登录？')) {
       window.location.reload();
     }
   }, []);
@@ -122,7 +174,6 @@ export function CustomVideoConference({
   const { localParticipant } = useLocalParticipant();
   const roomInfo = useRoomInfo();
   const roomCtx = useRoomContext();
-  const chatApi = useChat();
   const router = useRouter();
   const tracks = useTracks(
     [
@@ -132,7 +183,170 @@ export function CustomVideoConference({
     { onlySubscribed: false },
   );
   const layoutContext = useCreateLayoutContext();
-  const { isScreenSharing, isLocalCameraEnabled, toggleScreenShare, toggleCamera } = useConferenceControls({ localParticipant, roomCtx, userRole });
+  const resolvedUserRole = React.useMemo(() => {
+    if (typeof userRole === 'number') {
+      return userRole;
+    }
+    if (typeof userInfo?.user_roles === 'number') {
+      return userInfo.user_roles;
+    }
+    try {
+      const fallbackRole = getCurrentUserRole();
+      if (typeof fallbackRole === 'number') {
+        return fallbackRole;
+      }
+    } catch {
+      // ignore lookup errors
+    }
+    return 1;
+  }, [userRole, userInfo?.user_roles, getCurrentUserRole]);
+  const isGuest = resolvedUserRole === 0;
+  const isHostOrAdmin = resolvedUserRole === 2 || resolvedUserRole === 3;
+  const chatInputDisabled = isLocalUserDisabled || (!isHostOrAdmin && !isGuest && chatGlobalMute);
+  const chatPlaceholder = isGuest ? '游客需注册才能发言' : '说点什么...（最多60字）';
+  const chatBannerMessage = React.useMemo(() => {
+    if (isLocalUserDisabled) {
+      return '您已被主持人禁用，暂时无法发送消息';
+    }
+    if (!isHostOrAdmin && !isGuest && chatGlobalMute) {
+      return '主持人已开启全员禁言';
+    }
+    if (isGuest) {
+      return '游客需注册才能发送消息';
+    }
+    return undefined;
+  }, [isGuest, isHostOrAdmin, isLocalUserDisabled, chatGlobalMute]);
+  const handleGuestIntercept = React.useCallback(() => {
+    guestClickHandler();
+  }, [guestClickHandler]);
+
+  const sendChatMessageViaApi = React.useCallback(
+    async (message: string) => {
+      if (!roomInfo?.name) {
+        throw new Error('Room information is missing, cannot send chat message');
+      }
+      if (!userInfo?.uid) {
+        throw new Error('User information is missing, cannot send chat message');
+      }
+
+      const token = await resolveGatewayToken();
+      if (!token) {
+        throw new Error('Authentication expired, please sign in again');
+      }
+
+      const response = await callGatewayApi('/api/v1/chat/send', {
+        room_id: roomInfo.name,
+        user_uid: userInfo.uid,
+        message,
+      }, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const normalized = normalizeGatewayResponse(response);
+      if (!normalized.success) {
+        throw new Error(normalized.message || normalized.error || 'Failed to send chat message');
+      }
+    },
+    [roomInfo?.name, userInfo?.uid, resolveGatewayToken],
+  );
+
+  const handleSendChatMessage = React.useCallback(
+  async (rawMessage: string) => {
+    const trimmed = rawMessage.trim();
+    if (!trimmed) {
+      return false;
+    }
+    if (isGuest) {
+      handleGuestIntercept();
+      setChatValidationMessage('游客需注册才能发送消息');
+      return false;
+    }
+    if (chatInputDisabled) {
+      setChatValidationMessage(chatBannerMessage ?? '当前暂时无法发送消息');
+      return false;
+    }
+    const now = Date.now();
+    if (!isHostOrAdmin) {
+      const elapsed = now - lastSentTimeRef.current;
+      if (elapsed < MESSAGE_COOLDOWN) {
+        const remainingSeconds = Math.ceil((MESSAGE_COOLDOWN - elapsed) / 1000);
+        setChatValidationMessage(`发言太快了，请等待${remainingSeconds}秒后再发送`);
+        return false;
+      }
+    }
+    if (isSendingMessageRef.current) {
+      return false;
+    }
+    isSendingMessageRef.current = true;
+    setIsSendingChatMessage(true);
+    setChatValidationMessage(null);
+    try {
+      await sendChatMessageViaApi(trimmed);
+      const timestamp = Date.now();
+      lastSentTimeRef.current = timestamp;
+      const localUid =
+        typeof userInfo?.uid === 'number'
+          ? userInfo.uid
+          : typeof userId === 'number'
+            ? userId
+            : 0;
+      const nickname =
+        userInfo?.user_nickname ||
+        userInfo?.user_name ||
+        userName ||
+        '我';
+      const messageId = generateMessageId();
+      appendChatMessage(
+        {
+          id: messageId,
+          userUid: localUid,
+          nickname,
+          content: trimmed,
+          timestamp,
+          isSelf: true,
+        },
+        messageId,
+      );
+      pendingSelfMessagesRef.current.push({ content: trimmed, createdAt: timestamp });
+      if (pendingSelfMessagesRef.current.length > 20) {
+        pendingSelfMessagesRef.current.splice(
+          0,
+          pendingSelfMessagesRef.current.length - 20,
+        );
+      }
+      ensureChatVisible();
+      return true;
+    } catch (error) {
+      const fallbackMessage =
+        error instanceof Error ? error.message : '发送消息失败';
+      setChatValidationMessage(fallbackMessage || '发送消息失败');
+      return false;
+    } finally {
+      isSendingMessageRef.current = false;
+      setIsSendingChatMessage(false);
+    }
+  },
+  [
+    appendChatMessage,
+    chatBannerMessage,
+    chatInputDisabled,
+    ensureChatVisible,
+    generateMessageId,
+    handleGuestIntercept,
+    isGuest,
+    isHostOrAdmin,
+    sendChatMessageViaApi,
+    userId,
+    userInfo?.uid,
+    userInfo?.user_name,
+    userInfo?.user_nickname,
+    userName,
+  ],
+);
+  const { isScreenSharing, isLocalCameraEnabled, toggleScreenShare, toggleCamera } = useConferenceControls({ localParticipant, roomCtx, userRole: resolvedUserRole });
   const {
     roomDetails,
     participantRolesInfo,
@@ -193,11 +407,15 @@ export function CustomVideoConference({
     }));
   }, []);
   const toggleChat = React.useCallback(() => {
-    setWidgetState((prev: CustomWidgetState) => ({
-      ...prev,
-      showChat: !prev.showChat,
-    }));
-  }, []);
+    setWidgetState((prev: CustomWidgetState) => {
+      const nextShowChat = !prev.showChat;
+      return {
+        ...prev,
+        showChat: nextShowChat,
+        unreadMessages: nextShowChat ? 0 : prev.unreadMessages,
+      };
+    });
+  }, [setWidgetState]);
   const toggleHostPanel = React.useCallback(() => {
     setWidgetState((prev: CustomWidgetState) => ({
       ...prev,
@@ -518,323 +736,9 @@ export function CustomVideoConference({
     };
   }, [widgetState.showMicMenu, showChatMenu]);
   // 移动LiveKit Chat组件的DOM元素到我们的容器中
-  React.useEffect(() => {
-    const moveElements = () => {
-      const messagesElement = document.querySelector('.lk-chat-messages');
-      const messagesContainer = document.querySelector('.chat-messages-container');
-      if (messagesElement && messagesContainer && !messagesContainer.contains(messagesElement)) {
-        messagesContainer.appendChild(messagesElement);
-      }
-      const formElement = document.querySelector('.lk-chat-form');
-      const formContainer = document.querySelector('.chat-form-container');
-      if (formElement && formContainer && !formContainer.contains(formElement)) {
-        formContainer.appendChild(formElement);
-      }
-      // 添加输入框焦点监听和字符限制
-      const livekitInput = document.querySelector('.lk-chat-form-input') as HTMLInputElement;
-      if (livekitInput && !livekitInput.hasAttribute('data-focus-listener')) {
-        const handleInputFocus = () => {
-          if (!widgetState.showChat) {
-            setWidgetState(prev => ({ ...prev, showChat: true }));
-          }
-        };
-        // 设置字符限制和占位符
-        livekitInput.maxLength = 60;
-        livekitInput.placeholder = '说点什么...（最多60字）';
-        // 添加输入监听以进行实时敏感词检查
-        livekitInput.addEventListener('input', async (e) => {
-          const message = livekitInput.value.trim();
-          if (!message) return;
-          // 主持人和管理员不受屏蔽词限制
-          const isHostOrAdmin = userRole === 2 || userRole === 3;
-          if (isHostOrAdmin) {
-            // 主持人直接恢复正常状态
-            const sendButton = document.querySelector('.lk-chat-form button[type="submit"]') as HTMLButtonElement | null;
-            if (sendButton) {
-              sendButton.disabled = false;
-              sendButton.style.opacity = '1';
-              sendButton.style.cursor = 'pointer';
-              sendButton.title = '';
-            }
-            // 恢复输入框样式
-            livekitInput.style.borderColor = '';
-            livekitInput.style.backgroundColor = '';
-            // 隐藏错误提示
-            const errorTip = document.getElementById('sensitive-word-tip');
-            if (errorTip) {
-              errorTip.style.display = 'none';
-            }
-            return;
-          }
-          // 实时检查敏感词（仅对非主持人用户）
-          const checkResult = await checkBlockedWords(message);
-          // 获取发送按钮
-          const sendButton = document.querySelector('.lk-chat-form button[type="submit"]') as HTMLButtonElement | null;
-          if (!sendButton) return;
-          if (checkResult.blocked) {
-            // 检测到敏感词，禁用发送按钮并改变样式
-            sendButton.disabled = true;
-            sendButton.style.opacity = '0.5';
-            sendButton.style.cursor = 'not-allowed';
-            sendButton.title = `消息包含屏蔽词"${checkResult.word}"，无法发送`;
-            // 给输入框添加错误样式
-            livekitInput.style.borderColor = 'red';
-            livekitInput.style.backgroundColor = 'rgba(255, 0, 0, 0.05)';
-            // 添加明显的错误提示
-            let errorTip = document.getElementById('sensitive-word-tip');
-            if (!errorTip) {
-              errorTip = document.createElement('div');
-              errorTip.id = 'sensitive-word-tip';
-              errorTip.style.color = 'red';
-              errorTip.style.fontSize = '12px';
-              errorTip.style.padding = '4px 8px';
-              errorTip.style.marginBottom = '4px';
-              errorTip.style.backgroundColor = 'rgba(255, 0, 0, 0.1)';
-              errorTip.style.borderRadius = '4px';
-              errorTip.style.position = 'absolute';
-              errorTip.style.bottom = '65px';
-              errorTip.style.left = '8px';
-              errorTip.style.right = '8px';
-              errorTip.style.zIndex = '100';
-              errorTip.style.textAlign = 'center';
-              const chatFormContainer = document.querySelector('.chat-form-container') as HTMLElement | null;
-              if (chatFormContainer) {
-                chatFormContainer.style.position = 'relative';
-                chatFormContainer.appendChild(errorTip);
-              }
-            }
-            errorTip.textContent = `⚠️ 消息包含屏蔽词"${checkResult.word}"，请修改后发送`;
-            errorTip.style.display = 'block';
-          } else {
-            // 没有敏感词，恢复发送按钮和输入框样式
-            sendButton.disabled = false;
-            sendButton.style.opacity = '1';
-            sendButton.style.cursor = 'pointer';
-            sendButton.title = '';
-            // 恢复输入框样式
-            livekitInput.style.borderColor = '';
-            livekitInput.style.backgroundColor = '';
-            // 隐藏错误提示
-            const errorTip = document.getElementById('sensitive-word-tip');
-            if (errorTip) {
-              errorTip.style.display = 'none';
-            }
-          }
-        });
-        livekitInput.addEventListener('focus', handleInputFocus);
-        livekitInput.setAttribute('data-focus-listener', 'true');
-      }
-    };
-    // 强制移除聊天消息的背景和边框样式
-    const removeChatStyles = () => {
-      const chatEntries = document.querySelectorAll('.lk-chat-entry');
-      chatEntries.forEach(entry => {
-        const element = entry as HTMLElement;
-        element.style.background = 'transparent';
-        element.style.backgroundColor = 'transparent';
-        element.style.border = 'none';
-        element.style.borderBottom = 'none';
-        element.style.borderTop = 'none';
-        element.style.borderLeft = 'none';
-        element.style.borderRight = 'none';
-        element.style.boxShadow = 'none';
-        element.style.padding = '4px 12px';
-        element.style.margin = '2px 0';
-        element.style.marginBottom = '2px';
-      });
-    };
-    // 监听新消息添加，自动应用样式
-    const observer = new MutationObserver(() => {
-      removeChatStyles();
-    });
-    const chatMessages = document.querySelector('.lk-chat-messages');
-    if (chatMessages) {
-      observer.observe(chatMessages, { childList: true, subtree: true });
-    }
-    // 使用轮询方式检查和移动元素
-    const interval = setInterval(moveElements, 300);
-    // 定期检查和应用样式
-    const styleInterval = setInterval(removeChatStyles, 1000);
-    moveElements();
-    removeChatStyles();
-    return () => {
-      clearInterval(interval);
-      clearInterval(styleInterval);
-      observer.disconnect();
-      // 清理事件监听
-      const livekitInput = document.querySelector('.lk-chat-form-input') as HTMLInputElement;
-      if (livekitInput) {
-        livekitInput.removeEventListener('focus', () => {});
-        livekitInput.removeAttribute('data-focus-listener');
-      }
-    };
-  }, [widgetState.showChat]);
   // 检查消息是否包含屏蔽词
-  const sendChatMessageViaApi = React.useCallback(
-    async (message: string) => {
-      if (!roomInfo?.name) {
-        throw new Error('Room information is missing, cannot send chat message');
-      }
-      if (!userInfo?.uid) {
-        throw new Error('User information is missing, cannot send chat message');
-      }
-
-      const token = await resolveGatewayToken();
-      if (!token) {
-        throw new Error('Authentication expired, please sign in again');
-      }
-
-      const response = await callGatewayApi('/api/v1/chat/send', {
-        room_id: roomInfo.name,
-        user_uid: userInfo.uid,
-        message,
-      }, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      const normalized = normalizeGatewayResponse(response);
-      if (!normalized.success) {
-        throw new Error(normalized.message || normalized.error || 'Failed to send chat message');
-      }
-    },
-    [roomInfo?.name, userInfo?.uid, resolveGatewayToken],
-  );
-
+  
   // 当 chatGlobalMute 改变时，禁用或启用聊天输入框
-  React.useEffect(() => {
-    const chatInput = document.querySelector('.lk-chat-form-input') as HTMLInputElement | null;
-    const sendButton = document.querySelector('.lk-chat-form button[type="submit"]') as HTMLButtonElement | null;
-    if (!chatInput || !sendButton) return;
-
-    const isHostOrAdmin = userRole === 2 || userRole === 3;
-    const isGuest = userRole === 0;
-    const shouldDisable = !isHostOrAdmin && !isGuest && chatGlobalMute;
-
-    if (isGuest) {
-      chatInput.disabled = false;
-      chatInput.readOnly = true;
-      chatInput.style.background = '#444';
-      chatInput.style.cursor = 'not-allowed';
-      chatInput.style.color = '#999';
-      chatInput.placeholder = '游客需注册才能发言';
-      chatInput.title = '游客必须注册为会员才能发送消息';
-      chatInput.removeEventListener('click', guestClickHandler);
-      chatInput.addEventListener('click', guestClickHandler);
-    } else {
-      chatInput.disabled = shouldDisable;
-      chatInput.readOnly = false;
-      chatInput.style.background = shouldDisable ? '#444' : '';
-      chatInput.style.cursor = shouldDisable ? 'not-allowed' : 'auto';
-      chatInput.style.color = shouldDisable ? '#999' : '';
-      chatInput.placeholder = '说点什么...（最多60字）';
-      chatInput.title = shouldDisable ? '已启用全员禁言，无法发送消息' : '';
-      chatInput.removeEventListener('click', guestClickHandler);
-    }
-
-    if (isGuest) {
-      sendButton.disabled = false;
-      sendButton.style.background = '#555';
-      sendButton.style.opacity = '0.6';
-      sendButton.style.cursor = 'not-allowed';
-      sendButton.removeEventListener('click', guestClickHandler);
-      sendButton.addEventListener('click', guestClickHandler);
-    } else {
-      sendButton.disabled = shouldDisable;
-      sendButton.style.background = '';
-      sendButton.style.opacity = '';
-      sendButton.style.cursor = shouldDisable ? 'not-allowed' : 'pointer';
-    }
-
-    const form = chatInput.closest('.lk-chat-form') as HTMLFormElement | null;
-    if (!form) {
-      return;
-    }
-
-    form.setAttribute('data-message-cooldown', 'true');
-    form.onsubmit = async (e) => {
-      e.preventDefault();
-
-      if (userRole === 0) {
-        guestClickHandler(e);
-        return false;
-      }
-
-      if (!roomInfo?.name || !userInfo?.uid) {
-        alert('Missing room information, cannot send chat message');
-        return false;
-      }
-
-      const message = chatInput.value.trim();
-      if (!message) {
-        return false;
-      }
-
-      if (!isHostOrAdmin) {
-        const now = Date.now();
-        const timeSinceLastSent = now - lastSentTimeRef.current;
-        if (timeSinceLastSent < MESSAGE_COOLDOWN) {
-          const remaining = Math.ceil((MESSAGE_COOLDOWN - timeSinceLastSent) / 1000);
-          alert(`发言太快了，请等待${remaining}秒后再发送`);
-          return false;
-        }
-      }
-
-      const submitButton = form.querySelector('.lk-chat-form button[type="submit"]') as HTMLButtonElement | null;
-      if (isSendingMessageRef.current) {
-        return false;
-      }
-
-      try {
-        isSendingMessageRef.current = true;
-        if (submitButton) {
-          submitButton.disabled = true;
-          submitButton.style.cursor = 'not-allowed';
-          submitButton.style.opacity = '0.6';
-        }
-        await sendChatMessageViaApi(message);
-        try {
-          await chatApi.send(message);
-        } catch (sendError) {
-          console.error('Failed to publish chat message via LiveKit:', sendError);
-        }
-        chatInput.value = '';
-        chatInput.dispatchEvent(new Event('input', { bubbles: true }));
-        lastSentTimeRef.current = Date.now();
-      } catch (error) {
-        console.error('Failed to send chat message via API:', error);
-        const fallbackMessage = error instanceof Error ? error.message : 'Failed to send chat message';
-        alert(fallbackMessage);
-        return false;
-      } finally {
-        isSendingMessageRef.current = false;
-        if (submitButton) {
-          if (isGuest) {
-            submitButton.disabled = false;
-            submitButton.style.background = '#555';
-            submitButton.style.opacity = '0.6';
-            submitButton.style.cursor = 'not-allowed';
-          } else {
-            submitButton.disabled = shouldDisable;
-            submitButton.style.background = '';
-            submitButton.style.opacity = '';
-            submitButton.style.cursor = shouldDisable ? 'not-allowed' : 'pointer';
-          }
-        }
-      }
-
-      return false;
-    };
-
-    chatInput.setAttribute('data-intercept', 'true');
-
-    return () => {
-      form.removeAttribute('data-message-cooldown');
-      form.onsubmit = null;
-    };
-  }, [chatGlobalMute, userRole, userToken, roomInfo?.name, userInfo?.uid, sendChatMessageViaApi, guestClickHandler, chatApi]);
   // 手动切换屏幕共享
 
   // 主视频显示组件
@@ -1043,33 +947,154 @@ export function CustomVideoConference({
       </div>
     </div>
   ), [roomInfo.name, widgetState.showSettings, widgetState.showHostPanel, handleLeaveRoom, userRole, userId, userName, isScreenSharing, toggleScreenShare, toggleHostPanel, localParticipant, isLocalUserDisabled, isLocalCameraEnabled, toggleCamera]);
+  
   const handleDataReceived = React.useCallback((payload: Uint8Array) => {
+    const coerceNumber = (value: unknown): number | undefined => {
+      if (typeof value === 'number' && Number.isFinite(value)) {
+        return value;
+      }
+      if (typeof value === 'string' && value.trim() !== '') {
+        const parsed = Number(value);
+        if (!Number.isNaN(parsed)) {
+          return parsed;
+        }
+      }
+      return undefined;
+    };
+
+    const coerceTimestamp = (value: unknown): number => {
+      const numeric = coerceNumber(value);
+      if (typeof numeric === 'number') {
+        return numeric > 1_000_000_000_000 ? numeric : numeric * 1000;
+      }
+      if (typeof value === 'string' && value.trim() !== '') {
+        const parsed = Date.parse(value);
+        if (!Number.isNaN(parsed)) {
+          return parsed;
+        }
+      }
+      return Date.now();
+    };
+
     try {
-      const text = new TextDecoder().decode(payload).trim();
-      if (!text.startsWith('{') || !text.endsWith('}')) {
+      const rawText = new TextDecoder().decode(payload).trim();
+      if (!rawText) {
         return;
       }
-      const msg = JSON.parse(text);
-      if (msg.type === 'chat-mute' && typeof msg.mute === 'boolean') {
+      if (!rawText.startsWith('{') || !rawText.endsWith('}')) {
+        return;
+      }
+      const msg = JSON.parse(rawText);
+      const typeValue =
+        typeof msg.type === 'string'
+          ? msg.type.toLowerCase()
+          : typeof msg.event === 'string'
+            ? msg.event.toLowerCase()
+            : undefined;
+
+
+
+    
+  if (typeValue === 'chat-message' || typeValue === 'chat_message' || typeValue === 'chat') {
+    const dedupeKey =
+      msg.message_id ??
+      msg.messageId ??
+      msg.id ??
+      msg.uuid ??
+      msg.sequence ??
+      msg.seq;
+    const rawContent =
+      typeof msg.message === 'string'
+        ? msg.message
+        : typeof msg.content === 'string'
+          ? msg.content
+          : '';
+    const content = rawContent.trim();
+    if (!content) {
+      return;
+    }
+    const userUid = coerceNumber(
+      msg.user_uid ??
+      msg.userUid ??
+      msg.uid ??
+      msg.sender_uid ??
+      msg.senderUid ??
+      msg.userId ??
+      msg.user_id,
+    );
+    const nicknameRaw =
+      msg.nickname ??
+      msg.user_nickname ??
+      msg.user_name ??
+      msg.sender_name ??
+      msg.username ??
+      msg.name ??
+      '匿名用户';
+    const timestamp = coerceTimestamp(
+      msg.timestamp ?? msg.sent_at ?? msg.created_at ?? msg.createdAt ?? msg.time,
+    );
+    const isSelf =
+      typeof userInfo?.uid === 'number' && userUid !== undefined
+        ? userUid === userInfo.uid
+        : false;
+    const messageId =
+      typeof dedupeKey === 'string'
+        ? dedupeKey
+        : typeof dedupeKey === 'number'
+          ? String(dedupeKey)
+          : generateMessageId();
+    const now = Date.now();
+    pendingSelfMessagesRef.current = pendingSelfMessagesRef.current.filter(
+      entry => now - entry.createdAt < 10_000,
+    );
+    if (isSelf) {
+      const duplicateIndex = pendingSelfMessagesRef.current.findIndex(
+        entry =>
+          entry.content === content &&
+          Math.abs(timestamp - entry.createdAt) < 5_000,
+      );
+      if (duplicateIndex !== -1) {
+        pendingSelfMessagesRef.current.splice(duplicateIndex, 1);
+        return;
+      }
+    }
+    appendChatMessage(
+      {
+        id: messageId,
+        userUid: userUid ?? 0,
+        nickname: String(nicknameRaw ?? '匿名用户'),
+        content,
+        timestamp,
+        isSelf,
+      },
+      messageId,
+    );
+    return;
+  }
+    if (typeValue === 'chat-mute' && typeof msg.mute === 'boolean') {
         setChatGlobalMute(msg.mute);
-      } else if (msg.type === 'chat-control') {
+        return;
+      }
+
+      if (typeValue === 'chat-control') {
         if (typeof msg.chat_state !== 'undefined') {
           const nextMute = Number(msg.chat_state) !== 1;
           setChatGlobalMute(nextMute);
         } else if (typeof msg.mute === 'boolean') {
           setChatGlobalMute(msg.mute);
         }
+        return;
       }
-      if (msg.type === 'mic-mute' && typeof msg.mute === 'boolean') {
+
+      if (typeValue === 'mic-mute' && typeof msg.mute === 'boolean') {
         setMicGlobalMute(msg.mute);
+        return;
       }
-      // 🎯 删除所有数据通道状态管理，改用LiveKit原生attributesChanged事件
-      // ❌ 删除：mic-request, mic-approval, kick-from-mic, participant-render-state, participant-speak-state, sync-request
-      // ✅ 现在完全依赖 participant.attributes 和 attributesChanged 事件
     } catch (error) {
       console.warn('解析数据通道消息失败:', error);
     }
-  }, [userRole, roomCtx]);
+  }, [appendChatMessage, generateMessageId, pendingSelfMessagesRef, setChatGlobalMute, setMicGlobalMute, userInfo?.uid]);
+
   // 监听 LiveKit 数据通道，接收禁言/禁麦指令
   React.useEffect(() => {
     if (!roomCtx) return;
@@ -1712,54 +1737,18 @@ export function CustomVideoConference({
                     display: widgetState.showChat ? 'flex' : 'none',
                     flexDirection: 'column'
                   }}>
-                    {/* 消息列表区域 */}
-                    <div className="chat-messages-container" style={{
-                      flex: 1,
-                      overflow: 'hidden',
-                      width: '100%',
-                      maxWidth: '100%',
-                      boxSizing: 'border-box'
-                    }}>
-                      {/* LiveKit Chat组件 - 始终挂载 */}
-                      <div className="custom-chat-panel">
-                        <Chat messageFormatter={chatMessageFormatter} />
-                      </div>
-                    </div>
-                  </div>
-                  {/* Footer：输入表单区域 - 高度与ModernFooter保持一致 */}
-                  <div className="chat-input-section" style={{
-                    height: '65px',
-                    padding: '8px',
-                    background: '#333',
-                    borderTop: widgetState.showChat ? '1px solid #444' : 'none',
-                    display: 'flex',
-                    alignItems: 'center',
-                    flexShrink: 0
-                  }}>
-                    <div className="chat-form-container" style={{ width: '100%', position: 'relative' }}>
-                      {/* 添加禁用用户的聊天输入框覆盖层 */}
-                      {(isLocalUserDisabled || localParticipant?.attributes?.isDisabledUser === 'true') && (
-                        <div style={{
-                          position: 'absolute',
-                          top: 0,
-                          left: 0,
-                          right: 0,
-                          bottom: 0,
-                          background: 'rgba(0,0,0,0.6)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          zIndex: 10,
-                          borderRadius: '4px',
-                          pointerEvents: 'all'
-                        }}
-                        onClick={() => alert('您已被禁用，无法发送消息')}
-                        >
-                          <span style={{ color: '#ff6b6b', fontWeight: 'bold' }}>🚫 您已被禁用，无法发送消息</span>
-                        </div>
-                      )}
-                      {/* 聊天输入框会自动显示在这里 */}
-                    </div>
+                    <CustomChatPanel
+                      messages={chatMessages}
+                      onSend={handleSendChatMessage}
+                      isSending={isSendingChatMessage}
+                      inputDisabled={chatInputDisabled}
+                      bannerMessage={chatBannerMessage}
+                      validationMessage={chatValidationMessage}
+                      maxLength={60}
+                      isGuest={isGuest}
+                      onGuestIntercept={handleGuestIntercept}
+                      placeholder={chatPlaceholder}
+                    />
                   </div>
                 </div>
               </div>

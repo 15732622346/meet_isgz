@@ -1,10 +1,8 @@
 import type * as React from 'react';
-import type { MessageFormatter } from '@livekit/components-react';
 import type { TrackReference } from '@livekit/components-core';
 import type { Participant } from 'livekit-client';
 
 export interface CustomVideoConferenceProps {
-  chatMessageFormatter?: MessageFormatter;
   SettingsComponent?: React.ComponentType<{ onClose?: () => void }>;
   userRole?: number;
   userName?: string;
