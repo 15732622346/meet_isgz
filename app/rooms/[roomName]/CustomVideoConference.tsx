@@ -41,7 +41,7 @@ import { useConferenceControls } from './hooks/useConferenceControls';
 import { useRoomManagement } from './hooks/useRoomManagement';
 import { MainVideoDisplay, MainVideoDisplayNoHost } from './components/conference/MainVideoDisplay';
 import { MicParticipantList } from './components/conference/MicManagement';
-import { extractParticipantUid } from './utils/conference-utils';
+import { extractParticipantUid, normalizeUid } from './utils/conference-utils';
 import { API_CONFIG } from '@/lib/config';
 import { callGatewayApi, normalizeGatewayResponse } from '@/lib/api-client';
 import { resolveAssetPath } from '@/lib/assetPath';
@@ -287,29 +287,6 @@ export function CustomVideoConference({
       await sendChatMessageViaApi(trimmed);
       const timestamp = Date.now();
       lastSentTimeRef.current = timestamp;
-      const localUid =
-        typeof userInfo?.uid === 'number'
-          ? userInfo.uid
-          : typeof userId === 'number'
-            ? userId
-            : 0;
-      const nickname =
-        userInfo?.user_nickname ||
-        userInfo?.user_name ||
-        userName ||
-        '我';
-      const messageId = generateMessageId();
-      appendChatMessage(
-        {
-          id: messageId,
-          userUid: localUid,
-          nickname,
-          content: trimmed,
-          timestamp,
-          isSelf: true,
-        },
-        messageId,
-      );
       pendingSelfMessagesRef.current.push({ content: trimmed, createdAt: timestamp });
       if (pendingSelfMessagesRef.current.length > 20) {
         pendingSelfMessagesRef.current.splice(
@@ -1013,7 +990,7 @@ export function CustomVideoConference({
     if (!content) {
       return;
     }
-    const userUid = coerceNumber(
+    let userUid = coerceNumber(
       msg.user_uid ??
       msg.userUid ??
       msg.uid ??
@@ -1022,6 +999,25 @@ export function CustomVideoConference({
       msg.userId ??
       msg.user_id,
     );
+
+    const identityRaw =
+      msg.identity ??
+      msg.participant_identity ??
+      msg.participantIdentity ??
+      msg.sender_identity ??
+      msg.senderIdentity ??
+      msg.identity_id ??
+      msg.identityId;
+
+    const identity = typeof identityRaw === 'string' ? identityRaw.trim() : undefined;
+
+    if ((userUid === undefined || userUid === null) && identity) {
+      const normalizedFromIdentity = normalizeUid(identity.replace(/^user_/, ''));
+      if (normalizedFromIdentity !== null) {
+        userUid = normalizedFromIdentity;
+      }
+    }
+
     const nicknameRaw =
       msg.nickname ??
       msg.user_nickname ??
@@ -1033,10 +1029,17 @@ export function CustomVideoConference({
     const timestamp = coerceTimestamp(
       msg.timestamp ?? msg.sent_at ?? msg.created_at ?? msg.createdAt ?? msg.time,
     );
+
+    const localIdentity = roomCtx?.localParticipant?.identity ?? localParticipant?.identity ?? null;
+    const localUid = typeof userInfo?.uid === 'number' ? userInfo.uid : undefined;
+    const resolvedUserUid = userUid !== null && userUid !== undefined ? userUid : undefined;
+
+    const identityMatchesLocal =
+      typeof identity === 'string' && typeof localIdentity === 'string' && identity === localIdentity;
+
     const isSelf =
-      typeof userInfo?.uid === 'number' && userUid !== undefined
-        ? userUid === userInfo.uid
-        : false;
+      (localUid !== undefined && resolvedUserUid !== undefined && resolvedUserUid === localUid) ||
+      identityMatchesLocal;
     const messageId =
       typeof dedupeKey === 'string'
         ? dedupeKey
@@ -1061,7 +1064,7 @@ export function CustomVideoConference({
     appendChatMessage(
       {
         id: messageId,
-        userUid: userUid ?? 0,
+        userUid: resolvedUserUid ?? 0,
         nickname: String(nicknameRaw ?? '匿名用户'),
         content,
         timestamp,
@@ -1093,7 +1096,16 @@ export function CustomVideoConference({
     } catch (error) {
       console.warn('解析数据通道消息失败:', error);
     }
-  }, [appendChatMessage, generateMessageId, pendingSelfMessagesRef, setChatGlobalMute, setMicGlobalMute, userInfo?.uid]);
+  }, [
+    appendChatMessage,
+    generateMessageId,
+    pendingSelfMessagesRef,
+    setChatGlobalMute,
+    setMicGlobalMute,
+    userInfo?.uid,
+    localParticipant?.identity,
+    roomCtx?.localParticipant?.identity,
+  ]);
 
   // 监听 LiveKit 数据通道，接收禁言/禁麦指令
   React.useEffect(() => {
@@ -1617,13 +1629,14 @@ export function CustomVideoConference({
                 </div>
                 {/* 聊天区域 - 新的三段式布局 */}
                 <div className="chat-section" style={{ 
-                  width: 'calc(100% - 1px)',
+                  width: '100%',
                   height: widgetState.showChat ? '50%' : 'auto',
+                  minHeight: 0,
                   display: 'flex',
                   flexDirection: 'column',
                   borderTop: '1px solid #333',
                   background: '#2d2d2d',
-                  marginRight: '1px'
+                  boxSizing: 'border-box'
                 }}>
                   {/* 聊天Header */}
                   <div className="chat-header" style={{
@@ -1732,9 +1745,11 @@ export function CustomVideoConference({
                   </div>
                   {/* 聊天Content - 始终渲染，但控制显示/隐藏 */}
                   <div className="chat-content" style={{
-                    flex: widgetState.showChat ? 1 : 0,
+                    flexGrow: widgetState.showChat ? 1 : 0,
+                    flexShrink: widgetState.showChat ? 1 : 0,
+                    minHeight: 0,
                     overflow: 'hidden',
-                    display: widgetState.showChat ? 'flex' : 'none',
+                    display: 'flex',
                     flexDirection: 'column'
                   }}>
                     <CustomChatPanel
@@ -1748,6 +1763,7 @@ export function CustomVideoConference({
                       isGuest={isGuest}
                       onGuestIntercept={handleGuestIntercept}
                       placeholder={chatPlaceholder}
+                      isCollapsed={!widgetState.showChat}
                     />
                   </div>
                 </div>
@@ -1899,3 +1915,5 @@ export function CustomVideoConference({
 // 简化版本：不再判断“主持人是否在场”，始终渲染会议界面
 // 🎯 使用官方组件的麦位列表
 // 🎯 麦位参与者瓦片组件 - 配合官方ParticipantLoop使用
+
+

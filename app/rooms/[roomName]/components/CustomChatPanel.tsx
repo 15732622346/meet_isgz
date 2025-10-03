@@ -22,6 +22,7 @@ interface CustomChatPanelProps {
   isGuest: boolean;
   onGuestIntercept: () => void;
   placeholder?: string;
+  isCollapsed?: boolean;
 }
 
 const formatTime = (timestamp: number) => {
@@ -40,17 +41,23 @@ export function CustomChatPanel({
   onSend,
   isSending,
   inputDisabled,
-  bannerMessage,
+  bannerMessage: _bannerMessage,
   validationMessage,
   maxLength = 60,
   isGuest,
   onGuestIntercept,
-  placeholder = '说点什么…（最多60字）',
+  placeholder = '说点什么...（最多60字）',
+  isCollapsed = false,
 }: CustomChatPanelProps) {
   const [draft, setDraft] = React.useState('');
+  void _bannerMessage;
   const messageListRef = React.useRef<HTMLDivElement | null>(null);
 
   React.useEffect(() => {
+    if (isCollapsed) {
+      return;
+    }
+
     const container = messageListRef.current;
     if (!container) {
       return;
@@ -63,7 +70,7 @@ export function CustomChatPanel({
     if (nearBottom || lastMessage?.isSelf) {
       container.scrollTop = container.scrollHeight;
     }
-  }, [messages]);
+  }, [messages, isCollapsed]);
 
   const submitDraft = React.useCallback(async () => {
     const value = draft.trim();
@@ -103,29 +110,29 @@ export function CustomChatPanel({
 
   return (
     <div className={styles.chatPanel}>
-      <div className={styles.header}>点我收起聊天</div>
-      <div ref={messageListRef} className={styles.messageList}>
-        {messages.length === 0 ? (
-          <div className={styles.emptyState}>还没有消息，快来打个招呼吧～</div>
-        ) : (
-          messages.map(message => (
-            <div
-              key={message.id}
-              className={`${styles.message} ${message.isSelf ? styles.messageSelf : ''}`.trim()}
-            >
-              <div className={`${styles.meta} ${message.isSelf ? styles.metaSelf : ''}`.trim()}>
-                <span className={styles.name}>{message.nickname}</span>
-                <span className={styles.time}>{formatTime(message.timestamp)}</span>
+      {!isCollapsed && (
+        <div ref={messageListRef} className={styles.messageList}>
+          {messages.length === 0 ? (
+            <div className={styles.emptyState}>还没有聊天消息，快来打个招呼吧～</div>
+          ) : (
+            messages.map(message => (
+              <div
+                key={message.id}
+                className={styles.message}
+              >
+                <div className={styles.meta}>
+                  <span className={styles.name}>{message.nickname}</span>
+                  <span className={styles.time}>{formatTime(message.timestamp)}</span>
+                </div>
+                <div className={styles.bubble}>
+                  {message.content}
+                </div>
               </div>
-              <div className={`${styles.bubble} ${message.isSelf ? styles.bubbleSelf : ''}`.trim()}>
-                {message.content}
-              </div>
-            </div>
-          ))
-        )}
-      </div>
+            ))
+          )}
+        </div>
+      )}
       <div className={styles.footer}>
-        {bannerMessage && <div className={styles.banner}>{bannerMessage}</div>}
         {validationMessage && <div className={styles.validation}>{validationMessage}</div>}
         <form onSubmit={handleSubmit} className={styles.inputRow}>
           <textarea
