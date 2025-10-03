@@ -92,6 +92,7 @@ export function CustomVideoConference({
   const [showChatMenu, setShowChatMenu] = React.useState(false);
   const [chatGlobalMute, setChatGlobalMute] = React.useState(true); // 修改为true，默认不能发言
   const [micGlobalMute, setMicGlobalMute] = React.useState(false);
+  const [isChatTogglePending, setIsChatTogglePending] = React.useState(false);
   // 移除“主持人在场”判断逻辑
   // 添加isLocalUserDisabled状态来追踪用户禁用状态
   const [isLocalUserDisabled, setIsLocalUserDisabled] = React.useState(false);
@@ -101,6 +102,7 @@ export function CustomVideoConference({
   // 添加消息发送时间限制状态 - 使用useRef保持引用
   const lastSentTimeRef = React.useRef<number>(0);
   const MESSAGE_COOLDOWN = 2000; // 两秒冷却时间（毫秒）
+  const isSendingMessageRef = React.useRef(false);
   // 🎯 新增：房间详情信息管理
   // 游客点击处理函数 - 定义移到useEffect之前
   const guestClickHandler = React.useCallback((e: Event) => {
@@ -120,6 +122,7 @@ export function CustomVideoConference({
   const { localParticipant } = useLocalParticipant();
   const roomInfo = useRoomInfo();
   const roomCtx = useRoomContext();
+  const chatApi = useChat();
   const router = useRouter();
   const tracks = useTracks(
     [
@@ -276,34 +279,83 @@ export function CustomVideoConference({
   const userStatusLine = React.useMemo(() => {
     return [sanitizedUserName, userRoleLabel, ...permissionSegments].join('  ');
   }, [sanitizedUserName, userRoleLabel, permissionSegments]);
-  const handleGlobalMuteChat = React.useCallback(() => {
-    if (!roomCtx || (userRole !== 2 && userRole !== 3)) return;
-    try {
-      const newMuteState = !chatGlobalMute;
-      setChatGlobalMute(newMuteState);
-      setShowChatMenu(false);
-      // 1. 使用participant的attributes来存储禁言状态
-      if (localParticipant) {
-        // 更新本地参与者的attributes，用于持久化存储禁言状态
-        localParticipant.setAttributes({
-          ...localParticipant.attributes,
-          chatGlobalMute: newMuteState ? "true" : "false",
-          updatedAt: new Date().toISOString()
-        }).then(() => {
-
-        }).catch((err) => {
-          console.error('❌ 更新参与者attributes失败:', err);
-        });
-      }
-      // 2. 通过 LiveKit 数据通道广播给所有参与者（实时通知）
-      roomCtx.localParticipant.publishData(
-        new TextEncoder().encode(JSON.stringify({ type: 'chat-mute', mute: newMuteState })),
-        { reliable: true }
-      );
-    } catch (error) {
-      console.error('全员禁言广播失败:', error);
+  const handleGlobalMuteChat = React.useCallback(async () => {
+    if (!roomCtx || (userRole !== 2 && userRole !== 3)) {
+      return;
     }
-  }, [roomCtx, userRole, chatGlobalMute, localParticipant]);
+    if (!roomInfo?.name) {
+      alert('Missing room information, unable to update chat state');
+      return;
+    }
+    if (isChatTogglePending) {
+      return;
+    }
+    const nextMuteState = !chatGlobalMute;
+    const operatorUid = userInfo?.uid ?? hostUserId;
+    if (!operatorUid) {
+      alert('Missing host uid, unable to update chat state');
+      return;
+    }
+
+    setIsChatTogglePending(true);
+    try {
+      const token = await resolveGatewayToken();
+      const response = await callGatewayApi('/api/v1/chat/manage', {
+        room_id: roomInfo.name,
+        host_user_id: operatorUid,
+        action: nextMuteState ? 'disable' : 'enable',
+      }, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      const normalized = normalizeGatewayResponse(response);
+      if (!normalized.success) {
+        throw new Error(normalized.message || normalized.error || 'Failed to update chat state');
+      }
+
+      setChatGlobalMute(nextMuteState);
+      setShowChatMenu(false);
+
+      if (localParticipant) {
+        try {
+          await localParticipant.setAttributes({
+            ...localParticipant.attributes,
+            chatGlobalMute: nextMuteState ? 'true' : 'false',
+            updatedAt: new Date().toISOString(),
+          });
+        } catch (attrError) {
+          console.error('Failed to update participant attributes:', attrError);
+        }
+      }
+
+      try {
+        roomCtx.localParticipant.publishData(
+          new TextEncoder().encode(JSON.stringify({ type: 'chat-mute', mute: nextMuteState })),
+          { reliable: true },
+        );
+      } catch (broadcastError) {
+        console.error('Failed to broadcast chat mute update:', broadcastError);
+      }
+    } catch (error) {
+      console.error('Chat mute toggle failed:', error);
+      const message = error instanceof Error ? error.message : 'Failed to update chat state';
+      alert(message);
+    } finally {
+      setIsChatTogglePending(false);
+    }
+  }, [
+    roomCtx,
+    userRole,
+    chatGlobalMute,
+    isChatTogglePending,
+    roomInfo?.name,
+    userInfo?.uid,
+    hostUserId,
+    resolveGatewayToken,
+    localParticipant,
+  ]);
   const hasLeftRef = React.useRef(false);
 
   const leaveRoom = React.useCallback(async () => {
@@ -618,152 +670,171 @@ export function CustomVideoConference({
     };
   }, [widgetState.showChat]);
   // 检查消息是否包含屏蔽词
-  const checkBlockedWords = async (message: string): Promise<{blocked: boolean, word?: string}> => {
-    try {
-      await API_CONFIG.load();
-      const baseUrl = API_CONFIG.BASE_URL;
-      if (!baseUrl) {
-        console.warn('Gateway base URL 未配置，跳过屏蔽词检查');
-        return { blocked: false };
+  const sendChatMessageViaApi = React.useCallback(
+    async (message: string) => {
+      if (!roomInfo?.name) {
+        throw new Error('Room information is missing, cannot send chat message');
+      }
+      if (!userInfo?.uid) {
+        throw new Error('User information is missing, cannot send chat message');
       }
 
-      const normalizedBaseUrl = baseUrl.replace(/\/+$/, '');
-      const apiUrl = `${normalizedBaseUrl}/api/check-blocked-words.php`;
-      const response = await fetch(apiUrl, {
+      const token = await resolveGatewayToken();
+      if (!token) {
+        throw new Error('Authentication expired, please sign in again');
+      }
+
+      const response = await callGatewayApi('/api/v1/chat/send', {
+        room_id: roomInfo.name,
+        user_uid: userInfo.uid,
+        message,
+      }, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': userToken ? `Bearer ${userToken}` : ''
+          Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ message })
       });
-      const result = await response.json();
-      if (result.success) {
-        return {
-          blocked: result.blocked,
-          word: result.word
-        };
-      } else {
-        console.error('检查屏蔽词失败:', result.message);
-        return { blocked: false };
+
+      const normalized = normalizeGatewayResponse(response);
+      if (!normalized.success) {
+        throw new Error(normalized.message || normalized.error || 'Failed to send chat message');
       }
-    } catch (error) {
-      console.error('检查屏蔽词请求失败:', error);
-      return { blocked: false };
-    }
-  };
+    },
+    [roomInfo?.name, userInfo?.uid, resolveGatewayToken],
+  );
+
   // 当 chatGlobalMute 改变时，禁用或启用聊天输入框
   React.useEffect(() => {
     const chatInput = document.querySelector('.lk-chat-form-input') as HTMLInputElement | null;
     const sendButton = document.querySelector('.lk-chat-form button[type="submit"]') as HTMLButtonElement | null;
     if (!chatInput || !sendButton) return;
-    // 主持人和管理员不受禁言影响
+
     const isHostOrAdmin = userRole === 2 || userRole === 3;
-    // 游客状态判断
     const isGuest = userRole === 0;
-    // 普通会员在全局禁言时禁用输入框
     const shouldDisable = !isHostOrAdmin && !isGuest && chatGlobalMute;
-    // 设置输入框状态 - 修改：游客只模拟禁用
+
     if (isGuest) {
-      // 对游客：视觉上看起来禁用，但不使用disabled属性
-      chatInput.disabled = false; // 不真正禁用，以便能接收点击事件
-      chatInput.readOnly = true; // 但设为只读，防止输入
+      chatInput.disabled = false;
+      chatInput.readOnly = true;
       chatInput.style.background = '#444';
       chatInput.style.cursor = 'not-allowed';
       chatInput.style.color = '#999';
       chatInput.placeholder = '游客需注册才能发言';
       chatInput.title = '游客必须注册为会员才能发送消息';
-      // 移除之前的点击事件（如果有）
       chatInput.removeEventListener('click', guestClickHandler);
-      // 添加新的点击事件
       chatInput.addEventListener('click', guestClickHandler);
     } else {
-      // 对普通会员：常规禁用逻辑
-    chatInput.disabled = shouldDisable;
+      chatInput.disabled = shouldDisable;
       chatInput.readOnly = false;
-    chatInput.style.background = shouldDisable ? '#444' : '';
-    chatInput.style.cursor = shouldDisable ? 'not-allowed' : 'auto';
+      chatInput.style.background = shouldDisable ? '#444' : '';
+      chatInput.style.cursor = shouldDisable ? 'not-allowed' : 'auto';
       chatInput.style.color = shouldDisable ? '#999' : '';
       chatInput.placeholder = '说点什么...（最多60字）';
-    chatInput.title = shouldDisable ? '已启用全员禁言，无法发送消息' : '';
+      chatInput.title = shouldDisable ? '已启用全员禁言，无法发送消息' : '';
+      chatInput.removeEventListener('click', guestClickHandler);
     }
-    // 设置发送按钮状态 - 修改：游客的按钮类似处理
+
     if (isGuest) {
-      // 对游客：视觉上看起来禁用，但不使用disabled属性
-      sendButton.disabled = false; // 不真正禁用，以便能接收点击事件
+      sendButton.disabled = false;
       sendButton.style.background = '#555';
       sendButton.style.opacity = '0.6';
       sendButton.style.cursor = 'not-allowed';
-      // 移除之前的点击事件（如果有）
       sendButton.removeEventListener('click', guestClickHandler);
-      // 添加新的点击事件
       sendButton.addEventListener('click', guestClickHandler);
     } else {
-      // 对普通会员：常规禁用逻辑
-    sendButton.disabled = shouldDisable;
+      sendButton.disabled = shouldDisable;
       sendButton.style.background = '';
       sendButton.style.opacity = '';
-    sendButton.style.cursor = shouldDisable ? 'not-allowed' : 'pointer';
+      sendButton.style.cursor = shouldDisable ? 'not-allowed' : 'pointer';
     }
-    // 移除之前的事件监听器，确保不重复添加
-    const oldForm = chatInput.closest('.lk-chat-form') as HTMLFormElement | null;
-    if (oldForm && oldForm.hasAttribute('data-message-cooldown')) {
-      // 已经设置过事件监听，避免重复添加
+
+    const form = chatInput.closest('.lk-chat-form') as HTMLFormElement | null;
+    if (!form) {
       return;
     }
-    // 为所有用户添加发送拦截（屏蔽词检查 + 游客拦截 + 发送频率限制）
-    const form = chatInput.closest('.lk-chat-form') as HTMLFormElement | null;
-    if (form) {
-      // 标记已添加事件监听
-      form.setAttribute('data-message-cooldown', 'true');
-      const originalSubmit = form.onsubmit;
-      form.onsubmit = async (e) => {
-        e.preventDefault(); // 先阻止默认提交
-        // 游客拦截
-        if (userRole === 0) {
-          guestClickHandler(e);
+
+    form.setAttribute('data-message-cooldown', 'true');
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+
+      if (userRole === 0) {
+        guestClickHandler(e);
+        return false;
+      }
+
+      if (!roomInfo?.name || !userInfo?.uid) {
+        alert('Missing room information, cannot send chat message');
+        return false;
+      }
+
+      const message = chatInput.value.trim();
+      if (!message) {
+        return false;
+      }
+
+      if (!isHostOrAdmin) {
+        const now = Date.now();
+        const timeSinceLastSent = now - lastSentTimeRef.current;
+        if (timeSinceLastSent < MESSAGE_COOLDOWN) {
+          const remaining = Math.ceil((MESSAGE_COOLDOWN - timeSinceLastSent) / 1000);
+          alert(`发言太快了，请等待${remaining}秒后再发送`);
           return false;
         }
-        // 获取消息内容
-        const message = chatInput.value.trim();
-        if (!message) return false;
-        // 添加发送频率限制 - 主持人和管理员不受限制
-        if (!isHostOrAdmin) {
-          const now = Date.now();
-          const timeSinceLastSent = now - lastSentTimeRef.current;
-          // 检查是否在冷却时间内
-          if (timeSinceLastSent < MESSAGE_COOLDOWN) {
-            const remainingTime = Math.ceil((MESSAGE_COOLDOWN - timeSinceLastSent) / 1000);
-            alert(`发言太快了，请等待${remainingTime}秒后再发送`);
-            return false;
-          }
-        }
-        // 主持人和管理员不受屏蔽词限制
-        if (!isHostOrAdmin) {
-          // 提交前再次检查屏蔽词（双重保险）- 仅对非主持人用户
-          const checkResult = await checkBlockedWords(message);
-          if (checkResult.blocked) {
-            // 先清空输入框，再显示提示
-            chatInput.value = '';
-            // 确保输入框的状态更新
-            chatInput.dispatchEvent(new Event('input', { bubbles: true }));
-            // 再显示提示
-            alert(`消息包含屏蔽词"${checkResult.word}"，无法发送`);
-            return false;
-          }
-        }
-        // 更新最后发送时间
-        lastSentTimeRef.current = Date.now();
+      }
 
-        // 通过检查，调用原始提交处理
-        if (originalSubmit) {
-          return originalSubmit.call(form, e);
+      const submitButton = form.querySelector('.lk-chat-form button[type="submit"]') as HTMLButtonElement | null;
+      if (isSendingMessageRef.current) {
+        return false;
+      }
+
+      try {
+        isSendingMessageRef.current = true;
+        if (submitButton) {
+          submitButton.disabled = true;
+          submitButton.style.cursor = 'not-allowed';
+          submitButton.style.opacity = '0.6';
         }
-        return true;
-      };
-      chatInput.setAttribute('data-intercept', 'true');
-    }
-  }, [chatGlobalMute, userRole, userToken]);
+        await sendChatMessageViaApi(message);
+        try {
+          await chatApi.send(message);
+        } catch (sendError) {
+          console.error('Failed to publish chat message via LiveKit:', sendError);
+        }
+        chatInput.value = '';
+        chatInput.dispatchEvent(new Event('input', { bubbles: true }));
+        lastSentTimeRef.current = Date.now();
+      } catch (error) {
+        console.error('Failed to send chat message via API:', error);
+        const fallbackMessage = error instanceof Error ? error.message : 'Failed to send chat message';
+        alert(fallbackMessage);
+        return false;
+      } finally {
+        isSendingMessageRef.current = false;
+        if (submitButton) {
+          if (isGuest) {
+            submitButton.disabled = false;
+            submitButton.style.background = '#555';
+            submitButton.style.opacity = '0.6';
+            submitButton.style.cursor = 'not-allowed';
+          } else {
+            submitButton.disabled = shouldDisable;
+            submitButton.style.background = '';
+            submitButton.style.opacity = '';
+            submitButton.style.cursor = shouldDisable ? 'not-allowed' : 'pointer';
+          }
+        }
+      }
+
+      return false;
+    };
+
+    chatInput.setAttribute('data-intercept', 'true');
+
+    return () => {
+      form.removeAttribute('data-message-cooldown');
+      form.onsubmit = null;
+    };
+  }, [chatGlobalMute, userRole, userToken, roomInfo?.name, userInfo?.uid, sendChatMessageViaApi, guestClickHandler, chatApi]);
   // 手动切换屏幕共享
 
   // 主视频显示组件
@@ -976,12 +1047,18 @@ export function CustomVideoConference({
     try {
       const text = new TextDecoder().decode(payload).trim();
       if (!text.startsWith('{') || !text.endsWith('}')) {
-        // 非 JSON 消息，直接忽略
         return;
       }
       const msg = JSON.parse(text);
       if (msg.type === 'chat-mute' && typeof msg.mute === 'boolean') {
         setChatGlobalMute(msg.mute);
+      } else if (msg.type === 'chat-control') {
+        if (typeof msg.chat_state !== 'undefined') {
+          const nextMute = Number(msg.chat_state) !== 1;
+          setChatGlobalMute(nextMute);
+        } else if (typeof msg.mute === 'boolean') {
+          setChatGlobalMute(msg.mute);
+        }
       }
       if (msg.type === 'mic-mute' && typeof msg.mute === 'boolean') {
         setMicGlobalMute(msg.mute);
@@ -1581,21 +1658,22 @@ export function CustomVideoConference({
                             }}>
                               <button
                                 onClick={handleGlobalMuteChat}
-                                disabled={chatGlobalMute}
+                                disabled={isChatTogglePending || chatGlobalMute}
                                 style={{
                                   width: '100%',
                                   padding: '8px 12px',
                                   background: 'transparent',
                                   border: 'none',
                                   color: chatGlobalMute ? '#777' : '#fff',
-                                  cursor: chatGlobalMute ? 'not-allowed' : 'pointer',
+                                  cursor: isChatTogglePending ? 'wait' : chatGlobalMute ? 'not-allowed' : 'pointer',
                                   fontSize: '12px',
                                   textAlign: 'left',
                                   borderRadius: '4px 4px 0 0',
-                                  borderBottom: '1px solid #444'
+                                  borderBottom: '1px solid #444',
+                                  opacity: isChatTogglePending ? 0.6 : 1,
                                 }}
                                 onMouseEnter={(e) => {
-                                  if (!chatGlobalMute) (e.target as HTMLElement).style.background = '#333';
+                                  if (!chatGlobalMute && !isChatTogglePending) (e.target as HTMLElement).style.background = '#333';
                                 }}
                                 onMouseLeave={(e) => (e.target as HTMLElement).style.background = 'transparent'}
                               >
@@ -1603,19 +1681,20 @@ export function CustomVideoConference({
                               </button>
                               <button
                                 onClick={handleGlobalMuteChat}
-                                disabled={!chatGlobalMute}
+                                disabled={isChatTogglePending || !chatGlobalMute}
                                 style={{
                                   width: '100%',
                                   padding: '8px 12px',
                                   background: 'transparent',
                                   border: 'none',
                                   color: !chatGlobalMute ? '#777' : '#fff',
-                                  cursor: !chatGlobalMute ? 'not-allowed' : 'pointer',
+                                  cursor: isChatTogglePending ? 'wait' : !chatGlobalMute ? 'not-allowed' : 'pointer',
                                   fontSize: '12px',
-                                  textAlign: 'left'
+                                  textAlign: 'left',
+                                  opacity: isChatTogglePending ? 0.6 : 1,
                                 }}
                                 onMouseEnter={(e) => {
-                                  if (chatGlobalMute) (e.target as HTMLElement).style.background = '#333';
+                                  if (chatGlobalMute && !isChatTogglePending) (e.target as HTMLElement).style.background = '#333';
                                 }}
                                 onMouseLeave={(e) => (e.target as HTMLElement).style.background = 'transparent'}
                               >
