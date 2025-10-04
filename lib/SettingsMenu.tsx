@@ -1,133 +1,160 @@
 'use client';
 
-import React from 'react';
+import * as React from 'react';
+import { useMaybeLayoutContext, MediaDeviceMenu, useRoomContext, useIsRecording } from '@livekit/components-react';
+import styles from '@/styles/SettingsMenu.module.css';
+import { CameraSettings } from '@/lib/CameraSettings';
+import { MicrophoneSettings } from '@/lib/MicrophoneSettings';
 
-interface SettingsMenuProps {
-  isOpen?: boolean;
+export interface SettingsMenuProps extends React.HTMLAttributes<HTMLDivElement> {
   onClose?: () => void;
-  room?: any;
+  isOpen?: boolean;
+  room?: import('livekit-client').Room | null;
 }
 
-export function SettingsMenu({ isOpen, onClose, room }: SettingsMenuProps) {
-  const [selectedCamera, setSelectedCamera] = React.useState<string>('');
-  const [selectedMicrophone, setSelectedMicrophone] = React.useState<string>('');
-  const [selectedSpeaker, setSelectedSpeaker] = React.useState<string>('');
+export function SettingsMenu({ onClose, isOpen, room: _room, ...divProps }: SettingsMenuProps) {
+  const layoutContext = useMaybeLayoutContext();
+  const room = useRoomContext();
+  const recordingEndpoint = process.env.NEXT_PUBLIC_LK_RECORD_ENDPOINT;
 
-  if (!isOpen) {
+  const settings = React.useMemo(
+    () => ({
+      media: { camera: true, microphone: true, label: 'Media Devices', speaker: true },
+      recording: recordingEndpoint ? { label: 'Recording' } : undefined,
+    }),
+    [recordingEndpoint],
+  );
+
+  const tabs = React.useMemo(
+    () => Object.keys(settings).filter(tab => settings[tab as keyof typeof settings]) as Array<keyof typeof settings>,
+    [settings],
+  );
+
+  const [activeTab, setActiveTab] = React.useState<keyof typeof settings>(tabs[0] ?? 'media');
+
+  React.useEffect(() => {
+    if (tabs.length > 0 && !tabs.includes(activeTab)) {
+      setActiveTab(tabs[0]);
+    }
+  }, [tabs, activeTab]);
+
+  const isRecording = useIsRecording();
+  const [initialRecStatus, setInitialRecStatus] = React.useState(isRecording);
+  const [processingRecRequest, setProcessingRecRequest] = React.useState(false);
+
+  React.useEffect(() => {
+    if (initialRecStatus !== isRecording) {
+      setProcessingRecRequest(false);
+    }
+  }, [isRecording, initialRecStatus]);
+
+  const toggleRoomRecording = React.useCallback(async () => {
+    if (!recordingEndpoint) {
+      throw TypeError('No recording endpoint specified');
+    }
+    if (room.isE2EEEnabled) {
+      throw Error('Recording of encrypted meetings is currently not supported');
+    }
+    setProcessingRecRequest(true);
+    setInitialRecStatus(isRecording);
+
+    const endpoint = `${recordingEndpoint}/${isRecording ? 'stop' : 'start'}?roomName=${encodeURIComponent(room.name)}`;
+    try {
+      const response = await fetch(endpoint);
+      if (!response.ok) {
+        console.error(
+          'Error handling recording request, check server logs:',
+          response.status,
+          response.statusText,
+        );
+        setProcessingRecRequest(false);
+      }
+    } catch (error) {
+      console.error('Error handling recording request:', error);
+      setProcessingRecRequest(false);
+    }
+  }, [isRecording, recordingEndpoint, room]);
+
+  const handleClose = React.useCallback(() => {
+    layoutContext?.widget.dispatch?.({ msg: 'toggle_settings' });
+    onClose?.();
+  }, [layoutContext?.widget, onClose]);
+
+  if (isOpen === false) {
     return null;
   }
 
   return (
-    <div style={{
-      position: 'fixed',
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      background: 'rgba(0,0,0,0.5)',
-      display: 'flex',
-      justifyContent: 'center',
-      alignItems: 'center',
-      zIndex: 1000
-    }}>
-      <div style={{
-        background: '#1a1a1a',
-        borderRadius: '8px',
-        padding: '24px',
-        width: '400px',
-        maxWidth: '90vw',
-        color: 'white'
-      }}>
-        <div style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: '20px'
-        }}>
-          <h3 style={{ margin: 0 }}>设置</h3>
-          <button
-            onClick={onClose}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: 'white',
-              fontSize: '20px',
-              cursor: 'pointer'
-            }}
-          >
-            ✕
-          </button>
-        </div>
+    <div className="settings-menu" style={{ width: '100%', position: 'relative' }} {...divProps}>
+      <div className={styles.tabs}>
+        {tabs.map(tab => {
+          const config = settings[tab];
+          if (!config) {
+            return null;
+          }
+          return (
+            <button
+              key={tab}
+              className={`${styles.tab} lk-button`}
+              onClick={() => setActiveTab(tab)}
+              aria-pressed={tab === activeTab}
+            >
+              {config.label}
+            </button>
+          );
+        })}
+      </div>
 
-        <div style={{ marginBottom: '16px' }}>
-          <label style={{ display: 'block', marginBottom: '8px' }}>摄像头</label>
-          <select
-            value={selectedCamera}
-            onChange={(e) => setSelectedCamera(e.target.value)}
-            style={{
-              width: '100%',
-              padding: '8px',
-              borderRadius: '4px',
-              border: '1px solid #333',
-              background: '#333',
-              color: 'white'
-            }}
-          >
-            <option value="">选择摄像头</option>
-          </select>
-        </div>
+      <div className="tab-content">
+        {activeTab === 'media' && (
+          <>
+            {settings.media?.camera && (
+              <>
+                <h3>Camera</h3>
+                <section>
+                  <CameraSettings />
+                </section>
+              </>
+            )}
+            {settings.media?.microphone && (
+              <>
+                <h3>Microphone</h3>
+                <section>
+                  <MicrophoneSettings />
+                </section>
+              </>
+            )}
+            {settings.media?.speaker && (
+              <>
+                <h3>Speaker &amp; Headphones</h3>
+                <section className="lk-button-group">
+                  <span className="lk-button">Audio Output</span>
+                  <div className="lk-button-group-menu">
+                    <MediaDeviceMenu kind="audiooutput" />
+                  </div>
+                </section>
+              </>
+            )}
+          </>
+        )}
 
-        <div style={{ marginBottom: '16px' }}>
-          <label style={{ display: 'block', marginBottom: '8px' }}>麦克风</label>
-          <select
-            value={selectedMicrophone}
-            onChange={(e) => setSelectedMicrophone(e.target.value)}
-            style={{
-              width: '100%',
-              padding: '8px',
-              borderRadius: '4px',
-              border: '1px solid #333',
-              background: '#333',
-              color: 'white'
-            }}
-          >
-            <option value="">选择麦克风</option>
-          </select>
-        </div>
+        {activeTab === 'recording' && settings.recording && (
+          <>
+            <h3>Record Meeting</h3>
+            <section>
+              <p>{isRecording ? 'Meeting is currently being recorded' : 'No active recordings for this meeting'}</p>
+              <button className="lk-button" disabled={processingRecRequest} onClick={toggleRoomRecording}>
+                {isRecording ? 'Stop' : 'Start'} Recording
+              </button>
+            </section>
+          </>
+        )}
+      </div>
 
-        <div style={{ marginBottom: '20px' }}>
-          <label style={{ display: 'block', marginBottom: '8px' }}>扬声器</label>
-          <select
-            value={selectedSpeaker}
-            onChange={(e) => setSelectedSpeaker(e.target.value)}
-            style={{
-              width: '100%',
-              padding: '8px',
-              borderRadius: '4px',
-              border: '1px solid #333',
-              background: '#333',
-              color: 'white'
-            }}
-          >
-            <option value="">选择扬声器</option>
-          </select>
-        </div>
-
-        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-          <button
-            onClick={onClose}
-            style={{
-              background: '#4CAF50',
-              color: 'white',
-              border: 'none',
-              padding: '8px 16px',
-              borderRadius: '4px',
-              cursor: 'pointer'
-            }}
-          >
-            确定
-          </button>
-        </div>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', width: '100%' }}>
+        <button className="lk-button" onClick={handleClose}>
+          Close
+        </button>
       </div>
     </div>
   );

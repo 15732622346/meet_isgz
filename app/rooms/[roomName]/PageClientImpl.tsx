@@ -41,6 +41,7 @@ import {
 } from 'livekit-client';
 import { useSetupE2EE } from '@/lib/useSetupE2EE';
 import { CustomVideoConference } from './CustomVideoConference';
+import { SettingsMenu } from '@/lib/SettingsMenu';
 import type { RoomDetails } from './types/conference-types';
 import { PermissionHelper } from './PermissionHelper';
 import { UserAuthForm } from './UserAuthForm';
@@ -742,6 +743,7 @@ function VideoConferenceComponent(props: VideoConferenceComponentProps) {
       <RoomContext.Provider value={room}>
         <KeyboardShortcuts />
         <CustomVideoConference
+          SettingsComponent={SettingsMenu}
           userRole={props.userRole}
           userName={props.userName ?? props.connectionDetails.participantName}
           userId={props.userId}

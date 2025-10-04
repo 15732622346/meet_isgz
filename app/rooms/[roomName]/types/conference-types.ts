@@ -1,9 +1,9 @@
-﻿import type * as React from 'react';
+import type * as React from 'react';
 import type { TrackReference } from '@livekit/components-core';
 import type { Participant } from 'livekit-client';
 
 export interface CustomVideoConferenceProps {
-  SettingsComponent?: React.ComponentType<{ onClose?: () => void }>;
+  SettingsComponent?: React.ComponentType<SettingsComponentProps>;
   userRole?: number;
   userName?: string;
   userId?: number;
@@ -14,6 +14,12 @@ export interface CustomVideoConferenceProps {
   initialRoomDetails?: RoomDetails | null;
 }
 
+
+export interface SettingsComponentProps extends React.HTMLAttributes<HTMLDivElement> {
+  onClose?: () => void;
+  isOpen?: boolean;
+  room?: import('livekit-client').Room | null;
+}
 
 export interface RoomDetails {
   maxMicSlots?: number;
@@ -62,3 +68,4 @@ export interface MicParticipantTileProps {
   setDebugInfo?: (updater: (prev: string) => string) => void;
   currentUserName?: string;
 }
+

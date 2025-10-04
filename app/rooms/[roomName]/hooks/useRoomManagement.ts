@@ -82,12 +82,6 @@ export function useRoomManagement({
   }, [initialRoomDetails?.chatState, setChatGlobalMute]);
 
   React.useEffect(() => {
-    if (initialRoomDetails?.chatState !== undefined) {
-      setChatGlobalMute(initialRoomDetails.chatState !== 1);
-    }
-  }, [initialRoomDetails?.chatState, setChatGlobalMute]);
-
-  React.useEffect(() => {
     if (!roomCtx || !roomName || typeof roomCtx.on !== 'function' || typeof roomCtx.off !== 'function') {
       return;
     }

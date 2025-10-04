@@ -36,6 +36,7 @@ import { AudioShareHelper } from '../../../components/AudioShareHelper';
 import { AttributeBasedVideoTile } from '../../../components/AttributeBasedVideoTile';
 import { HideLiveKitCounters } from '../../../components/HideLiveKitCounters';
 import { CustomChatPanel, type CustomChatMessage } from './components/CustomChatPanel';
+import { SettingsMenu as DefaultSettingsMenu } from '@/lib/SettingsMenu';
 import type { CustomVideoConferenceProps, CustomWidgetState } from './types/conference-types';
 import { useConferenceControls } from './hooks/useConferenceControls';
 import { useRoomManagement } from './hooks/useRoomManagement';
@@ -73,6 +74,7 @@ export function CustomVideoConference({
   hostUserId,
   initialRoomDetails,
 }: CustomVideoConferenceProps) {
+  const EffectiveSettingsComponent = SettingsComponent ?? DefaultSettingsMenu;
   // 🎯 版本标识 - LiveKit原生机制重构版本
   // 🎯 版本验证弹窗已移除
   const [widgetState, setWidgetState] = React.useState<CustomWidgetState>({
@@ -180,6 +182,7 @@ const [micGlobalMute, setMicGlobalMute] = React.useState(false);
   const { localParticipant } = useLocalParticipant();
   const roomInfo = useRoomInfo();
   const roomCtx = useRoomContext();
+  const layoutContext = useCreateLayoutContext();
   const router = useRouter();
   const tracks = useTracks(
     [
@@ -188,7 +191,6 @@ const [micGlobalMute, setMicGlobalMute] = React.useState(false);
     ],
     { onlySubscribed: false },
   );
-  const layoutContext = useCreateLayoutContext();
   const resolvedUserRole = React.useMemo(() => {
     if (typeof userRole === 'number') {
       return userRole;
@@ -391,11 +393,12 @@ const [micGlobalMute, setMicGlobalMute] = React.useState(false);
     }));
   }, []);
   const toggleSettings = React.useCallback(() => {
+    layoutContext.widget.dispatch?.({ msg: 'toggle_settings' });
     setWidgetState((prev: CustomWidgetState) => ({
       ...prev,
-      showSettings: !prev.showSettings
+      showSettings: !prev.showSettings,
     }));
-  }, []);
+  }, [layoutContext.widget]);
   const handleMicStatusChange = React.useCallback((newStatus: string) => {
     setCurrentMicStatus(newStatus as 'disabled' | 'enabled' | 'requesting' | 'muted_by_host');
   }, []);
@@ -1407,7 +1410,7 @@ const [micGlobalMute, setMicGlobalMute] = React.useState(false);
     };
   }, [localParticipant, isLocalUserDisabled, setDebugInfo]);
   return (
-    <LayoutContextProvider value={layoutContext}>
+    <LayoutContextProvider value={layoutContext} onWidgetChange={widgetUpdate}>
       <div className="lk-video-conference">
         <HideLiveKitCounters />
         <div className="lk-video-conference-inner">
@@ -1794,58 +1797,12 @@ const [micGlobalMute, setMicGlobalMute] = React.useState(false);
           onClose={() => setWidgetState(prev => ({ ...prev, showAudioHelper: false }))}
         />
         {/* 设置面板 */}
-        {SettingsComponent && widgetState.showSettings && (
-          <div 
-            className="settings-overlay" 
-            style={{
-              position: 'fixed',
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              background: 'rgba(0,0,0,0.7)',
-              zIndex: 1000,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}
-            onClick={(e) => {
-              // 点击背景关闭设置面板
-              if (e.target === e.currentTarget) {
-                setWidgetState(prev => ({ ...prev, showSettings: false }));
-              }
-            }}
-          >
-            <div style={{
-              background: '#2a2a2a',
-              borderRadius: '8px',
-              padding: '20px',
-              maxWidth: '600px',
-              width: '90%',
-              maxHeight: '80vh',
-              overflow: 'auto',
-              position: 'relative'
-            }}>
-              {/* 关闭按钮 */}
-              <button
-                onClick={() => setWidgetState(prev => ({ ...prev, showSettings: false }))}
-                style={{
-                  position: 'absolute',
-                  top: '10px',
-                  right: '10px',
-                  background: 'transparent',
-                  border: 'none',
-                  color: '#fff',
-                  fontSize: '20px',
-                  cursor: 'pointer',
-                  padding: '5px'
-                }}
-                title="关闭设置"
-              >
-                ✕
-              </button>
-              <SettingsComponent onClose={() => setWidgetState(prev => ({ ...prev, showSettings: false }))} />
-            </div>
+        {widgetState.showSettings && (
+          <div className="lk-settings-menu-modal" style={{ display: 'block' }}>
+            <EffectiveSettingsComponent
+              onClose={() => setWidgetState(prev => ({ ...prev, showSettings: false }))}
+              isOpen={widgetState.showSettings}
+            />
           </div>
         )}
         {/* 房间音频渲染器 */}
