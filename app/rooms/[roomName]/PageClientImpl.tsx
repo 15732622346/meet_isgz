@@ -624,6 +624,7 @@ function VideoConferenceComponent(props: VideoConferenceComponentProps) {
       maxMicSlots: props.roomData.maxMicSlots,
       roomName: props.roomData.roomName,
       roomState: props.roomData.roomState,
+      chatState: props.roomData.chatState,
     };
   }, [props.roomData]);
   const e2eeSetupComplete = e2eeSetup.isSetupComplete;

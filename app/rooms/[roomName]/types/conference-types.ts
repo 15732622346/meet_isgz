@@ -1,4 +1,4 @@
-import type * as React from 'react';
+﻿import type * as React from 'react';
 import type { TrackReference } from '@livekit/components-core';
 import type { Participant } from 'livekit-client';
 
@@ -19,6 +19,7 @@ export interface RoomDetails {
   maxMicSlots?: number;
   roomName?: string;
   roomState?: number;
+  chatState?: number;
 }
 
 export interface CustomWidgetState {

@@ -88,12 +88,19 @@ export function CustomVideoConference({
   });
   const [currentMicStatus, setCurrentMicStatus] = React.useState<'disabled' | 'enabled' | 'requesting' | 'muted_by_host'>('disabled');
   const [showChatMenu, setShowChatMenu] = React.useState(false);
-  const [chatGlobalMute, setChatGlobalMute] = React.useState(true); // 修改为true，默认不能发言
-  const [micGlobalMute, setMicGlobalMute] = React.useState(false);
+  const [chatGlobalMute, setChatGlobalMute] = React.useState(
+  () => initialRoomDetails?.chatState !== 1,
+);
+React.useEffect(() => {
+  if (initialRoomDetails?.chatState !== undefined) {
+    setChatGlobalMute(initialRoomDetails.chatState !== 1);
+  }
+}, [initialRoomDetails?.chatState]);
+
+const [micGlobalMute, setMicGlobalMute] = React.useState(false);
   const [isChatTogglePending, setIsChatTogglePending] = React.useState(false);
   const [chatMessages, setChatMessages] = React.useState<CustomChatMessage[]>([]);
   const chatMessageKeysRef = React.useRef(new Set<string>());
-  const pendingSelfMessagesRef = React.useRef<Array<{ content: string; createdAt: number }>>([]);
   const handleLeaveRoomCallbackRef = React.useRef<() => void>(() => {});
   const [isSendingChatMessage, setIsSendingChatMessage] = React.useState(false);
   const [chatValidationMessage, setChatValidationMessage] = React.useState<string | null>(null);
@@ -284,15 +291,7 @@ export function CustomVideoConference({
     setChatValidationMessage(null);
     try {
       await sendChatMessageViaApi(trimmed);
-      const timestamp = Date.now();
-      lastSentTimeRef.current = timestamp;
-      pendingSelfMessagesRef.current.push({ content: trimmed, createdAt: timestamp });
-      if (pendingSelfMessagesRef.current.length > 20) {
-        pendingSelfMessagesRef.current.splice(
-          0,
-          pendingSelfMessagesRef.current.length - 20,
-        );
-      }
+      lastSentTimeRef.current = Date.now();
       ensureChatVisible();
       return true;
     } catch (error) {
@@ -306,20 +305,13 @@ export function CustomVideoConference({
     }
   },
   [
-    appendChatMessage,
     chatBannerMessage,
     chatInputDisabled,
     ensureChatVisible,
-    generateMessageId,
     handleGuestIntercept,
     isGuest,
     isHostOrAdmin,
     sendChatMessageViaApi,
-    userId,
-    userInfo?.uid,
-    userInfo?.user_name,
-    userInfo?.user_nickname,
-    userName,
   ],
 );
   const { isScreenSharing, isLocalCameraEnabled, toggleScreenShare, toggleCamera } = useConferenceControls({ localParticipant, roomCtx, userRole: resolvedUserRole });
@@ -1040,21 +1032,6 @@ export function CustomVideoConference({
         : typeof dedupeKey === 'number'
           ? String(dedupeKey)
           : generateMessageId();
-    const now = Date.now();
-    pendingSelfMessagesRef.current = pendingSelfMessagesRef.current.filter(
-      entry => now - entry.createdAt < 10_000,
-    );
-    if (isSelf) {
-      const duplicateIndex = pendingSelfMessagesRef.current.findIndex(
-        entry =>
-          entry.content === content &&
-          Math.abs(timestamp - entry.createdAt) < 5_000,
-      );
-      if (duplicateIndex !== -1) {
-        pendingSelfMessagesRef.current.splice(duplicateIndex, 1);
-        return;
-      }
-    }
     appendChatMessage(
       {
         id: messageId,
@@ -1093,7 +1070,6 @@ export function CustomVideoConference({
   }, [
     appendChatMessage,
     generateMessageId,
-    pendingSelfMessagesRef,
     setChatGlobalMute,
     setMicGlobalMute,
     userInfo?.uid,

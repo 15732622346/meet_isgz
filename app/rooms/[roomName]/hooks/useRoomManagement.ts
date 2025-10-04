@@ -76,6 +76,18 @@ export function useRoomManagement({
   }, [initialRoomDetailsKey, initialRoomDetails]);
 
   React.useEffect(() => {
+    if (initialRoomDetails?.chatState !== undefined) {
+      setChatGlobalMute(initialRoomDetails.chatState !== 1);
+    }
+  }, [initialRoomDetails?.chatState, setChatGlobalMute]);
+
+  React.useEffect(() => {
+    if (initialRoomDetails?.chatState !== undefined) {
+      setChatGlobalMute(initialRoomDetails.chatState !== 1);
+    }
+  }, [initialRoomDetails?.chatState, setChatGlobalMute]);
+
+  React.useEffect(() => {
     if (!roomCtx || !roomName || typeof roomCtx.on !== 'function' || typeof roomCtx.off !== 'function') {
       return;
     }
@@ -86,20 +98,28 @@ export function useRoomManagement({
           return;
         }
         const metadata = JSON.parse(roomCtx.metadata);
-        if (metadata && typeof metadata.maxMicSlots === 'number') {
+        if (metadata && typeof metadata === 'object') {
           setRoomDetails(prev => {
             const next: RoomDetails = {
               ...(prev ?? {}),
-              maxMicSlots: metadata.maxMicSlots,
             };
+            if (typeof metadata.maxMicSlots === 'number') {
+              next.maxMicSlots = metadata.maxMicSlots;
+            }
             if (!next.roomName && roomName) {
               next.roomName = roomName;
             }
             if (typeof metadata.roomState === 'number') {
               next.roomState = metadata.roomState;
             }
+            if (typeof metadata.chatState === 'number') {
+              next.chatState = metadata.chatState;
+            }
             return next;
           });
+          if (typeof metadata.chatState === 'number') {
+            setChatGlobalMute(metadata.chatState !== 1);
+          }
         }
       } catch (error) {
         console.error('解析房间元数据失败:', error);
