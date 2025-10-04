@@ -512,18 +512,6 @@ export function CustomVideoConference({
       setChatGlobalMute(nextMuteState);
       setShowChatMenu(false);
 
-      if (localParticipant) {
-        try {
-          await localParticipant.setAttributes({
-            ...localParticipant.attributes,
-            chatGlobalMute: nextMuteState ? 'true' : 'false',
-            updatedAt: new Date().toISOString(),
-          });
-        } catch (attrError) {
-          console.error('Failed to update participant attributes:', attrError);
-        }
-      }
-
       try {
         roomCtx.localParticipant.publishData(
           new TextEncoder().encode(JSON.stringify({ type: 'chat-mute', mute: nextMuteState })),
