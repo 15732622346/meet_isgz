@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { Track } from 'livekit-client';
+import { Track, type ScreenShareCaptureOptions } from 'livekit-client';
 
 import { isCameraEnabled } from '@/lib/token-utils';
 
@@ -10,7 +10,7 @@ interface LocalParticipantLike {
   setCameraEnabled: (enabled: boolean) => Promise<void>;
   isMicrophoneEnabled: boolean;
   setMicrophoneEnabled: (enabled: boolean) => Promise<void>;
-  setScreenShareEnabled: (enabled: boolean) => Promise<void>;
+  setScreenShareEnabled: (enabled: boolean, options?: ScreenShareCaptureOptions) => Promise<void>;
   getTrackPublication: (source: Track.Source) => any;
   unpublishTrack: (track: any) => Promise<void>;
   getTrackPublications?: () => any[];
@@ -47,6 +47,10 @@ export function useConferenceControls({
   const [isScreenSharing, setIsScreenSharing] = React.useState(false);
   const [isLocalCameraEnabled, setIsLocalCameraEnabled] = React.useState(false);
   const [autoScreenShareAttempted, setAutoScreenShareAttempted] = React.useState(false);
+  const screenShareOptions = React.useMemo<ScreenShareCaptureOptions>(() => ({
+    audio: true,
+    systemAudio: 'include',
+  }), []);
 
   const startAutoScreenShare = React.useCallback(async () => {
     if (!localParticipant || autoScreenShareAttempted) {
@@ -70,7 +74,7 @@ export function useConferenceControls({
     }
     setAutoScreenShareAttempted(true);
     try {
-      await localParticipant.setScreenShareEnabled(true);
+      await localParticipant.setScreenShareEnabled(true, screenShareOptions);
       setIsScreenSharing(true);
       if (localParticipant.isCameraEnabled) {
         await localParticipant.setCameraEnabled(false);
@@ -78,7 +82,7 @@ export function useConferenceControls({
     } catch (error) {
       console.error('自动开启屏幕共享失败:', error);
     }
-  }, [localParticipant, userRole, autoScreenShareAttempted]);
+  }, [localParticipant, userRole, autoScreenShareAttempted, screenShareOptions]);
 
   React.useEffect(() => {
     if (!localParticipant) {
@@ -153,13 +157,13 @@ export function useConferenceControls({
     }
     try {
       const shouldEnable = !isScreenSharing;
-      await localParticipant.setScreenShareEnabled(shouldEnable);
+      await localParticipant.setScreenShareEnabled(shouldEnable, shouldEnable ? screenShareOptions : undefined);
       setIsScreenSharing(shouldEnable);
       if (!shouldEnable) {
         const publications = localParticipant.getTrackPublications?.();
         if (Array.isArray(publications)) {
           for (const pub of publications) {
-            if (pub.source === Track.Source.ScreenShare && pub.track) {
+            if ((pub.source === Track.Source.ScreenShare || pub.source === Track.Source.ScreenShareAudio) && pub.track) {
               await localParticipant.unpublishTrack(pub.track);
             }
           }
@@ -180,7 +184,7 @@ export function useConferenceControls({
       }
       alert(message);
     }
-  }, [localParticipant, isScreenSharing]);
+  }, [localParticipant, isScreenSharing, screenShareOptions]);
 
   const toggleCamera = React.useCallback(async () => {
     if (!localParticipant) {

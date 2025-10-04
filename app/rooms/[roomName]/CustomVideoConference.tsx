@@ -94,6 +94,7 @@ export function CustomVideoConference({
   const [chatMessages, setChatMessages] = React.useState<CustomChatMessage[]>([]);
   const chatMessageKeysRef = React.useRef(new Set<string>());
   const pendingSelfMessagesRef = React.useRef<Array<{ content: string; createdAt: number }>>([]);
+  const handleLeaveRoomCallbackRef = React.useRef<() => void>(() => {});
   const [isSendingChatMessage, setIsSendingChatMessage] = React.useState(false);
   const [chatValidationMessage, setChatValidationMessage] = React.useState<string | null>(null);
   React.useEffect(() => {
@@ -162,10 +163,8 @@ export function CustomVideoConference({
   const guestClickHandler = React.useCallback((event?: Event) => {
     event?.preventDefault();
     event?.stopPropagation();
-    if (confirm('游客必须注册为会员才能使用发送消息功能，是否前往注册登录？')) {
-      window.location.reload();
-    }
-  }, []);
+    handleLeaveRoomCallbackRef.current();
+  }, [handleLeaveRoomCallbackRef]);
 
   // UserContext集成
   const { userInfo, resolveGatewayToken, getCurrentUserRole, inviteCode, performLogout, clearUserInfo } = useUserContext();
@@ -584,6 +583,9 @@ export function CustomVideoConference({
   }, [leaveRoom]);
 
   const handleLeaveRoom = React.useCallback(() => {
+    if (hasLeftRef.current) {
+      return;
+    }
     if (!confirm('确定要离开会议吗？')) {
       return;
     }
@@ -592,6 +594,10 @@ export function CustomVideoConference({
       console.error('离开会议流程异常:', error);
     });
   }, [leaveRoom]);
+
+  React.useEffect(() => {
+    handleLeaveRoomCallbackRef.current = handleLeaveRoom;
+  }, [handleLeaveRoom]);
 
   React.useEffect(() => {
     const safeLeaveRoom = () => {
