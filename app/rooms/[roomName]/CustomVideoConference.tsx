@@ -78,7 +78,7 @@ export function CustomVideoConference({
   // 🎯 版本标识 - LiveKit原生机制重构版本
   // 🎯 版本验证弹窗已移除
   const [widgetState, setWidgetState] = React.useState<CustomWidgetState>({
-    showChat: false,
+    showChat: true,
     showParticipants: true, // 默认显示参与者列表
     showHostPanel: false, // 默认不显示主持人面板
     showMicMenu: false, // 默认不显示麦克风菜单
@@ -211,7 +211,7 @@ const [micGlobalMute, setMicGlobalMute] = React.useState(false);
   const isGuest = resolvedUserRole === 0;
   const isHostOrAdmin = resolvedUserRole === 2 || resolvedUserRole === 3;
   const chatInputDisabled = isLocalUserDisabled || (!isHostOrAdmin && !isGuest && chatGlobalMute);
-  const chatPlaceholder = isGuest ? '游客需注册才能发言' : '说点什么...（最多60字）';
+  const chatPlaceholder = isGuest ? '游客需注册才能发言' : '说点什么吧...';
   const chatBannerMessage = React.useMemo(() => {
     if (isLocalUserDisabled) {
       return '您已被主持人禁用，暂时无法发送消息';
@@ -367,7 +367,8 @@ const [micGlobalMute, setMicGlobalMute] = React.useState(false);
   const widgetUpdate = React.useCallback((state: BaseWidgetState) => {
     setWidgetState(prevState => ({
       ...prevState,
-      ...state
+      ...state,
+      showChat: true,
     }));
   }, []);
   const toggleParticipants = React.useCallback(() => {
@@ -377,14 +378,11 @@ const [micGlobalMute, setMicGlobalMute] = React.useState(false);
     }));
   }, []);
   const toggleChat = React.useCallback(() => {
-    setWidgetState((prev: CustomWidgetState) => {
-      const nextShowChat = !prev.showChat;
-      return {
-        ...prev,
-        showChat: nextShowChat,
-        unreadMessages: nextShowChat ? 0 : prev.unreadMessages,
-      };
-    });
+    setWidgetState((prev: CustomWidgetState) => ({
+      ...prev,
+      showChat: true,
+      unreadMessages: 0,
+    }));
   }, [setWidgetState]);
   const toggleHostPanel = React.useCallback(() => {
     setWidgetState((prev: CustomWidgetState) => ({
@@ -1451,7 +1449,7 @@ const [micGlobalMute, setMicGlobalMute] = React.useState(false);
                   </div>
                 </div>
                 {/* 主视频显示区域 */}
-                <div style={{ flex: '1', overflow: 'hidden' }}>
+                <div style={{ flex: '1', overflowY: 'auto' }}>
                   <MainVideoDisplayNoHost 
                     roomInfo={roomInfo} 
                     tracks={tracks} 
@@ -1486,9 +1484,9 @@ const [micGlobalMute, setMicGlobalMute] = React.useState(false);
               </div>
               {/* 右侧边栏 (固定宽度，贴右边缘) */}
               <div className="sidebar-container" style={{ 
-                width: 'min(280px, 25vw)',
-                minWidth: '200px',
-                maxWidth: '300px',
+                width: '340px',
+                minWidth: '340px',
+                maxWidth: '340px',
                 display: 'flex', 
                 flexDirection: 'column',
                 background: '#2a2a2a'
@@ -1585,11 +1583,16 @@ const [micGlobalMute, setMicGlobalMute] = React.useState(false);
                 </div>
                 {/* 移除这里的调试信息，改为在主调试面板中显示 */}
                 {/* 参与者列表区域 */}
-                <div className="participants-section" style={{ 
-                  flex: '1',
-                  display: widgetState.showParticipants ? 'block' : 'none',
-                  overflow: 'hidden'
-                }}>
+                <div
+                  className="participants-section"
+                  style={{
+                    flex: '1 1 0%',
+                    display: widgetState.showParticipants ? 'block' : 'none',
+                    minHeight: 0,
+                    overflowY: 'auto',
+                    overflowX: 'hidden',
+                  }}
+                >
                                       <MicParticipantList
                         currentUserRole={userRole}
                         currentUserName={userName}
@@ -1626,13 +1629,14 @@ const [micGlobalMute, setMicGlobalMute] = React.useState(false);
                       style={{
                         background: 'transparent',
                         border: 'none',
-                        color: '#4a9eff',
-                        cursor: 'pointer',
-                        fontSize: '12px',
-                        padding: '0'
+                        color: '#ffffff',
+                        cursor: 'default',
+                        fontSize: '16px',
+                        padding: '0',
+                        pointerEvents: 'none'
                       }}
                     >
-                      {widgetState.showChat ? '点我收起聊天' : '点我展开聊天'}
+                      聊天
                     </button>
                     {/* 管理员菜单按钮 - 直接放在这里，不需要额外的容器div */}
                       {userRole && (userRole === 2 || userRole === 3) && (
@@ -1721,7 +1725,7 @@ const [micGlobalMute, setMicGlobalMute] = React.useState(false);
                     flexGrow: widgetState.showChat ? 1 : 0,
                     flexShrink: widgetState.showChat ? 1 : 0,
                     minHeight: 0,
-                    overflow: 'hidden',
+                    overflowY: 'auto',
                     display: 'flex',
                     flexDirection: 'column'
                   }}>
@@ -1736,7 +1740,6 @@ const [micGlobalMute, setMicGlobalMute] = React.useState(false);
                       isGuest={isGuest}
                       onGuestIntercept={handleGuestIntercept}
                       placeholder={chatPlaceholder}
-                      isCollapsed={!widgetState.showChat}
                     />
                   </div>
                 </div>
@@ -1842,5 +1845,6 @@ const [micGlobalMute, setMicGlobalMute] = React.useState(false);
 // 简化版本：不再判断“主持人是否在场”，始终渲染会议界面
 // 🎯 使用官方组件的麦位列表
 // 🎯 麦位参与者瓦片组件 - 配合官方ParticipantLoop使用
+
 
 

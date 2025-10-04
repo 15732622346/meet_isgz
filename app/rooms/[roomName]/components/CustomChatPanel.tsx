@@ -46,7 +46,7 @@ export function CustomChatPanel({
   maxLength = 60,
   isGuest,
   onGuestIntercept,
-  placeholder = '说点什么...（最多60字）',
+  placeholder = '说点什么吧...',
   isCollapsed = false,
 }: CustomChatPanelProps) {
   const [draft, setDraft] = React.useState('');
@@ -119,14 +119,11 @@ export function CustomChatPanel({
               <div
                 key={message.id}
                 className={styles.message}
+                title={formatTime(message.timestamp)}
               >
-                <div className={styles.meta}>
-                  <span className={styles.name}>{message.nickname}</span>
-                  <span className={styles.time}>{formatTime(message.timestamp)}</span>
-                </div>
-                <div className={styles.bubble}>
-                  {message.content}
-                </div>
+                <span className={styles.name}>{message.nickname}</span>
+                <span className={styles.separator}>：</span>
+                <span className={styles.content}>{message.content}</span>
               </div>
             ))
           )}
@@ -164,3 +161,4 @@ export function CustomChatPanel({
     </div>
   );
 }
+

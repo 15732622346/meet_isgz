@@ -89,12 +89,42 @@ class ApiClient {
         ...options,
       });
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      const responseText = await response.text();
+      let parsed: unknown;
+
+      if (responseText) {
+        try {
+          parsed = JSON.parse(responseText);
+        } catch (parseError) {
+          console.warn('API request JSON parse failed:', parseError);
+        }
       }
 
-      const data = await response.json();
-      return data;
+      if (!response.ok) {
+        const parsedObject =
+          parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+            ? (parsed as Record<string, unknown>)
+            : null;
+        const parsedMessage = parsedObject?.message as string | undefined;
+        const parsedError = parsedObject?.error as string | undefined;
+        const fallbackMessage =
+          parsedMessage ?? parsedError ?? `HTTP error! status: ${response.status}`;
+        return {
+          ...(parsedObject ?? {}),
+          success: false,
+          message: parsedMessage ?? fallbackMessage,
+          error: parsedError ?? fallbackMessage,
+        } as ApiResponse<T>;
+      }
+
+      if (parsed && typeof parsed === 'object') {
+        return parsed as ApiResponse<T>;
+      }
+
+      return {
+        success: true,
+        data: parsed as T | undefined,
+      };
     } catch (error) {
       console.error('API request failed:', error);
       return {
@@ -293,12 +323,42 @@ export async function callGatewayApi<T = any>(
       headers,
     });
 
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+    const responseText = await response.text();
+    let parsed: unknown;
+
+    if (responseText) {
+      try {
+        parsed = JSON.parse(responseText);
+      } catch (parseError) {
+        console.warn('Gateway API response JSON parse failed:', parseError);
+      }
     }
 
-    const data = await response.json();
-    return data;
+    if (!response.ok) {
+      const parsedObject =
+        parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+          ? (parsed as Record<string, unknown>)
+          : null;
+      const parsedMessage = parsedObject?.message as string | undefined;
+      const parsedError = parsedObject?.error as string | undefined;
+      const fallbackMessage =
+        parsedMessage ?? parsedError ?? `HTTP error! status: ${response.status}`;
+      return {
+        ...(parsedObject ?? {}),
+        success: false,
+        message: parsedMessage ?? fallbackMessage,
+        error: parsedError ?? fallbackMessage,
+      } as ApiResponse<T>;
+    }
+
+    if (parsed && typeof parsed === 'object') {
+      return parsed as ApiResponse<T>;
+    }
+
+    return {
+      success: true,
+      data: parsed as T | undefined,
+    };
   } catch (error) {
     console.error('Gateway API request failed:', error);
     return {
