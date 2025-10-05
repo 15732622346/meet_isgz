@@ -6,6 +6,7 @@ import {
   useLocalParticipant,
   VideoTrack,
 } from '@livekit/components-react';
+import { useUserContext } from '@/contexts/UserContext';
 import { BackgroundBlur, VirtualBackground } from '@livekit/track-processors';
 import { isLocalTrack, type LocalTrackPublication, Track } from 'livekit-client';
 import Desk from '../public/background-images/samantha-gades-BlIhVfXbi9s-unsplash.jpg';
@@ -20,6 +21,11 @@ const BACKGROUND_IMAGES = [
 
 export function CameraSettings() {
   const { cameraTrack, localParticipant } = useLocalParticipant();
+  const { getCurrentUserRole } = useUserContext();
+  const userRole = getCurrentUserRole();
+  const canControlCamera = React.useMemo(() => {
+    return userRole >= 2;
+  }, [userRole]);
   const [backgroundType, setBackgroundType] = React.useState<BackgroundType>(() => {
     const processorName = (cameraTrack as LocalTrackPublication | undefined)?.track?.getProcessor()?.name;
     if (processorName === 'background-blur') {
@@ -79,12 +85,26 @@ export function CameraSettings() {
         />
       )}
 
-      <section className="lk-button-group">
-        <TrackToggle source={Track.Source.Camera}>Camera</TrackToggle>
+      <section
+        className="lk-button-group"
+        style={!canControlCamera ? { opacity: 0.5, pointerEvents: 'none' } : undefined}
+      >
+        <TrackToggle
+          source={Track.Source.Camera}
+          disabled={!canControlCamera}
+          title={canControlCamera ? 'Camera' : '摄像头仅主持人可用'}
+        >
+          Camera
+        </TrackToggle>
         <div className="lk-button-group-menu">
           <MediaDeviceMenu kind="videoinput" />
         </div>
       </section>
+      {!canControlCamera && (
+        <p className="lk-hint-text" style={{ fontSize: '12px', color: '#9c9c9c', margin: '0' }}>
+          当前角色无法开启摄像头
+        </p>
+      )}
 
       <div style={{ marginTop: '10px' }}>
         <div style={{ marginBottom: '8px' }}>Background Effects</div>

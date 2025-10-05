@@ -1,10 +1,36 @@
 import * as React from 'react';
-import { useKrispNoiseFilter } from '@livekit/components-react/krisp';
 import { TrackToggle, MediaDeviceMenu } from '@livekit/components-react';
+import { useKrispNoiseFilter } from '@livekit/components-react/krisp';
 import { Track } from 'livekit-client';
 import { isLowPowerDevice } from './client-utils';
+import { isFeatureEnabled } from './config';
+
+const NOISE_FILTER_FEATURE_ENABLED = isFeatureEnabled('noiseFilter');
 
 export function MicrophoneSettings() {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'row',
+        gap: '10px',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+      }}
+    >
+      <section className="lk-button-group">
+        <TrackToggle source={Track.Source.Microphone}>Microphone</TrackToggle>
+        <div className="lk-button-group-menu">
+          <MediaDeviceMenu kind="audioinput" />
+        </div>
+      </section>
+
+      {NOISE_FILTER_FEATURE_ENABLED ? <NoiseFilterToggle /> : null}
+    </div>
+  );
+}
+
+function NoiseFilterToggle() {
   const { isNoiseFilterEnabled, setNoiseFilterEnabled, isNoiseFilterPending } = useKrispNoiseFilter({
     filterOptions: {
       bufferOverflowMs: 100,
@@ -25,30 +51,13 @@ export function MicrophoneSettings() {
   }, [setNoiseFilterEnabled]);
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'row',
-        gap: '10px',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-      }}
+    <button
+      className="lk-button"
+      onClick={() => setNoiseFilterEnabled(!isNoiseFilterEnabled)}
+      disabled={isNoiseFilterPending}
+      aria-pressed={isNoiseFilterEnabled}
     >
-      <section className="lk-button-group">
-        <TrackToggle source={Track.Source.Microphone}>Microphone</TrackToggle>
-        <div className="lk-button-group-menu">
-          <MediaDeviceMenu kind="audioinput" />
-        </div>
-      </section>
-
-      <button
-        className="lk-button"
-        onClick={() => setNoiseFilterEnabled(!isNoiseFilterEnabled)}
-        disabled={isNoiseFilterPending}
-        aria-pressed={isNoiseFilterEnabled}
-      >
-        {isNoiseFilterEnabled ? 'Disable' : 'Enable'} Enhanced Noise Cancellation
-      </button>
-    </div>
+      {isNoiseFilterEnabled ? 'Disable' : 'Enable'} Enhanced Noise Cancellation
+    </button>
   );
 }

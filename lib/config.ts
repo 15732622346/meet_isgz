@@ -54,6 +54,7 @@ export const config = {
     screenshare: true,
     chat: true,
     handRaise: true,
+    noiseFilter: false,
   },
 };
 
@@ -87,7 +88,7 @@ export function getEnvironment() {
   };
 }
 
-// API_CONFIG ?? - ??API?????????
+// API_CONFIG 配置 - Gateway API 相关配置
 const DEFAULT_GATEWAY_BASE_URL = config.gateway.baseUrl;
 const DEFAULT_ENDPOINTS: Record<string, string> = {
   ROOM_INFO: '/api/v1/rooms/detail',

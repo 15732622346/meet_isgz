@@ -1,4 +1,4 @@
-* {
+﻿* {
   box-sizing: border-box;
 }
 
@@ -68,39 +68,40 @@ h2 a {
   text-decoration: none;
 }
 
-/* 隐藏未读消息计数器 */
+/* 闅愯棌鏈娑堟伅璁℃暟鍣?*/
 .chat-header > div:last-child:not(.chat-menu-container) {
   display: none !important;
 }
 
-/* 使用更简单的方法隐藏chat-header中的文本节点"0" */
+/* 浣跨敤鏇寸畝鍗曠殑鏂规硶闅愯棌chat-header涓殑鏂囨湰鑺傜偣"0" */
 .chat-header {
-  color: #333; /* 与背景色相同，使文本不可见 */
+  color: #333; /* 涓庤儗鏅壊鐩稿悓锛屼娇鏂囨湰涓嶅彲瑙?*/
 }
 
-/* 恢复按钮的颜色 */
+/* 鎭㈠鎸夐挳鐨勯鑹?*/
 .chat-header button {
-  color: #4a9eff !important;
+  color: #ffffff !important;
 }
 
-/* 恢复管理员菜单中的文本颜色 */
+/* 鎭㈠绠＄悊鍛樿彍鍗曚腑鐨勬枃鏈鑹?*/
 .chat-menu-container, .chat-menu-container * {
-  color: initial;
+    color: inherit;
+
 }
 
-/* 屏幕共享视频优化 - 解决YouTube视频在全屏模式下底部被截断问题 */
+/* 灞忓箷鍏变韩瑙嗛浼樺寲 - 瑙ｅ喅YouTube瑙嗛鍦ㄥ叏灞忔ā寮忎笅搴曢儴琚埅鏂棶棰?*/
 
-/* 1. 确保容器正确处理内容 */
+/* 1. 纭繚瀹瑰櫒姝ｇ‘澶勭悊鍐呭 */
 .screen-share-wrapper {
-  /* 确保容器能够适当约束内容 */
-  overflow: hidden !important; /* 防止内容溢出 */
+  /* 纭繚瀹瑰櫒鑳藉閫傚綋绾︽潫鍐呭 */
+  overflow: hidden !important; /* 闃叉鍐呭婧㈠嚭 */
   position: relative;
   display: flex;
   justify-content: center;
   align-items: center;
 }
 
-/* 2. 全屏模式下的容器处理 */
+/* 2. 鍏ㄥ睆妯″紡涓嬬殑瀹瑰櫒澶勭悊 */
 .screen-share-wrapper.fullscreen-mode,
 .screen-share-wrapper.fullscreen {
   width: 100vw !important;
@@ -108,7 +109,7 @@ h2 a {
   background-color: #000;
 }
 
-/* 3. 视频元素关键设置 - 确保不超出父div */
+/* 3. 瑙嗛鍏冪礌鍏抽敭璁剧疆 - 纭繚涓嶈秴鍑虹埗div */
 .screen-share-wrapper video,
 .screen-share-wrapper .lk-video-track video,
 .screen-share-wrapper .lk-video-element {
@@ -116,18 +117,18 @@ h2 a {
   height: 100% !important;
   max-width: 100% !important; 
   max-height: 100% !important;
-  /* 使用contain确保视频内容完整显示而不被裁剪 */
+  /* 浣跨敤contain纭繚瑙嗛鍐呭瀹屾暣鏄剧ず鑰屼笉琚鍓?*/
   object-fit: contain !important;
   background-color: #000;
 }
 
-/* 确保视频内容容器不会截断视频 */
+/* 纭繚瑙嗛鍐呭瀹瑰櫒涓嶄細鎴柇瑙嗛 */
 .lk-participant-tile,
 .lk-video-track {
-  overflow: hidden !important; /* 修改为hidden确保内容不溢出 */
+  overflow: hidden !important; /* 淇敼涓篽idden纭繚鍐呭涓嶆孩鍑?*/
 }
 
-/* 全屏模式下的所有视频元素 */
+/* 鍏ㄥ睆妯″紡涓嬬殑鎵€鏈夎棰戝厓绱?*/
 :fullscreen video,
 :-webkit-full-screen video,
 :-moz-full-screen video {
@@ -138,20 +139,20 @@ h2 a {
   max-height: 100% !important;
 }
 
-/* 视频区域容器样式优化 */
+/* 瑙嗛鍖哄煙瀹瑰櫒鏍峰紡浼樺寲 */
 .main-video-display {
   position: relative !important;
   width: 100% !important;
   height: 100% !important;
   max-width: 100% !important;
   max-height: 100% !important;
-  overflow: hidden !important; /* 确保内容不溢出 */
+  overflow: hidden !important; /* 纭繚鍐呭涓嶆孩鍑?*/
   display: flex !important;
   justify-content: center !important;
   align-items: center !important;
 }
 
-/* 视频内容区域约束 */
+/* 瑙嗛鍐呭鍖哄煙绾︽潫 */
 .video-content, 
   .video-conference-active {
     position: relative !important;
@@ -166,7 +167,7 @@ h2 a {
     flex: 1 1 0% !important;
   }
 
-/* 保持视频网格布局在容器内 */
+/* 淇濇寔瑙嗛缃戞牸甯冨眬鍦ㄥ鍣ㄥ唴 */
 .lk-grid-layout {
   position: relative !important;
   width: 100% !important;
@@ -180,18 +181,18 @@ h2 a {
   flex: 1 1 0% !important;
 }
 
-/* 视频元素等比例缩放和居中 */
+/* 瑙嗛鍏冪礌绛夋瘮渚嬬缉鏀惧拰灞呬腑 */
 .lk-participant-media-video {
   position: relative !important;
-  width: auto !important; /* 让宽度自适应 */
-  height: auto !important; /* 让高度自适应 */
-  max-width: 100% !important; /* 限制最大宽度 */
-  max-height: 100% !important; /* 限制最大高度 */
-  object-fit: contain !important; /* 保持宽高比并完整显示 */
-  margin: auto !important; /* 使用margin: auto辅助居中 */
+  width: auto !important; /* 璁╁搴﹁嚜閫傚簲 */
+  height: auto !important; /* 璁╅珮搴﹁嚜閫傚簲 */
+  max-width: 100% !important; /* 闄愬埗鏈€澶у搴?*/
+  max-height: 100% !important; /* 闄愬埗鏈€澶ч珮搴?*/
+  object-fit: contain !important; /* 淇濇寔瀹介珮姣斿苟瀹屾暣鏄剧ず */
+  margin: auto !important; /* 浣跨敤margin: auto杈呭姪灞呬腑 */
 }
 
-/* 确保屏幕共享视频居中显示 */
+/* 纭繚灞忓箷鍏变韩瑙嗛灞呬腑鏄剧ず */
 video[data-lk-source="screen_share"] {
   position: relative !important;
   top: 0 !important;
@@ -221,4 +222,6 @@ video[data-lk-source="screen_share"] {
   display: flex;
   flex-direction: column;
 }
+
+
 

@@ -95,7 +95,7 @@ export function CustomChatPanel({
     [submitDraft],
   );
 
-  const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
       void submitDraft();
@@ -132,14 +132,14 @@ export function CustomChatPanel({
       <div className={styles.footer}>
         {validationMessage && <div className={styles.validation}>{validationMessage}</div>}
         <form onSubmit={handleSubmit} className={styles.inputRow}>
-          <textarea
+          <input
+            type="text"
             className={styles.input}
             value={draft}
             onChange={event => setDraft(event.target.value)}
             onKeyDown={handleKeyDown}
             maxLength={maxLength}
             placeholder={placeholder}
-            rows={1}
             onFocus={handleFocus}
             onClick={() => {
               if (isGuest) {
@@ -161,4 +161,9 @@ export function CustomChatPanel({
     </div>
   );
 }
+
+
+
+
+
 

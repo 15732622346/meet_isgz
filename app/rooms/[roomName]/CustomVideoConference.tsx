@@ -210,8 +210,14 @@ const [micGlobalMute, setMicGlobalMute] = React.useState(false);
   }, [userRole, userInfo?.user_roles, getCurrentUserRole]);
   const isGuest = resolvedUserRole === 0;
   const isHostOrAdmin = resolvedUserRole === 2 || resolvedUserRole === 3;
-  const chatInputDisabled = isLocalUserDisabled || (!isHostOrAdmin && !isGuest && chatGlobalMute);
-  const chatPlaceholder = isGuest ? '游客需注册才能发言' : '说点什么吧...';
+  
+  const isGlobalChatMutedForUser = !isHostOrAdmin && !isGuest && chatGlobalMute;
+  const chatInputDisabled = isLocalUserDisabled || isGlobalChatMutedForUser;
+  const chatPlaceholder = isGuest
+    ? '游客需注册才能发言'
+    : isGlobalChatMutedForUser
+      ? '全员禁言中'
+      : '说点什么吧...';
   const chatBannerMessage = React.useMemo(() => {
     if (isLocalUserDisabled) {
       return '您已被主持人禁用，暂时无法发送消息';
@@ -461,11 +467,14 @@ const [micGlobalMute, setMicGlobalMute] = React.useState(false);
     if (userRole === 3 || userRole === 2) {
       return ['摄像头✅', '麦克风✅', '共享✅', '控麦✅'];
     }
-    return ['摄像头❌', '麦克风⚠️', '共享❌', '控麦❌'];
+    return [];
   }, [userRole]);
   const userStatusLine = React.useMemo(() => {
-    return [sanitizedUserName, userRoleLabel, ...permissionSegments].join('  ');
-  }, [sanitizedUserName, userRoleLabel, permissionSegments]);
+    if (userRole === 3 || userRole === 2) {
+      return [sanitizedUserName, userRoleLabel, ...permissionSegments].join('  ');
+    }
+    return sanitizedUserName;
+  }, [sanitizedUserName, userRole, userRoleLabel, permissionSegments]);
   const handleGlobalMuteChat = React.useCallback(async () => {
     if (!roomCtx || (userRole !== 2 && userRole !== 3)) {
       return;
@@ -1646,7 +1655,7 @@ const [micGlobalMute, setMicGlobalMute] = React.useState(false);
                             style={{
                               background: 'transparent',
                               border: 'none',
-                              color: '#4a9eff',
+                              color: '#ffffff',
                               cursor: 'pointer',
                               fontSize: '16px',
                               padding: '4px',
@@ -1679,7 +1688,7 @@ const [micGlobalMute, setMicGlobalMute] = React.useState(false);
                                   padding: '8px 12px',
                                   background: 'transparent',
                                   border: 'none',
-                                  color: chatGlobalMute ? '#777' : '#fff',
+                                  color: chatGlobalMute ? 'rgba(255, 255, 255, 0.35)' : '#ffffff',
                                   cursor: isChatTogglePending ? 'wait' : chatGlobalMute ? 'not-allowed' : 'pointer',
                                   fontSize: '12px',
                                   textAlign: 'left',
@@ -1688,7 +1697,7 @@ const [micGlobalMute, setMicGlobalMute] = React.useState(false);
                                   opacity: isChatTogglePending ? 0.6 : 1,
                                 }}
                                 onMouseEnter={(e) => {
-                                  if (!chatGlobalMute && !isChatTogglePending) (e.target as HTMLElement).style.background = '#333';
+                                  if (!chatGlobalMute && !isChatTogglePending) (e.target as HTMLElement).style.background = 'rgba(255, 255, 255, 0.08)';
                                 }}
                                 onMouseLeave={(e) => (e.target as HTMLElement).style.background = 'transparent'}
                               >
@@ -1702,14 +1711,14 @@ const [micGlobalMute, setMicGlobalMute] = React.useState(false);
                                   padding: '8px 12px',
                                   background: 'transparent',
                                   border: 'none',
-                                  color: !chatGlobalMute ? '#777' : '#fff',
+                                  color: !chatGlobalMute ? 'rgba(255, 255, 255, 0.35)' : '#ffffff',
                                   cursor: isChatTogglePending ? 'wait' : !chatGlobalMute ? 'not-allowed' : 'pointer',
                                   fontSize: '12px',
                                   textAlign: 'left',
                                   opacity: isChatTogglePending ? 0.6 : 1,
                                 }}
                                 onMouseEnter={(e) => {
-                                  if (chatGlobalMute && !isChatTogglePending) (e.target as HTMLElement).style.background = '#333';
+                                  if (chatGlobalMute && !isChatTogglePending) (e.target as HTMLElement).style.background = 'rgba(255, 255, 255, 0.08)';
                                 }}
                                 onMouseLeave={(e) => (e.target as HTMLElement).style.background = 'transparent'}
                               >
@@ -1845,6 +1854,12 @@ const [micGlobalMute, setMicGlobalMute] = React.useState(false);
 // 简化版本：不再判断“主持人是否在场”，始终渲染会议界面
 // 🎯 使用官方组件的麦位列表
 // 🎯 麦位参与者瓦片组件 - 配合官方ParticipantLoop使用
+
+
+
+
+
+
 
 
 

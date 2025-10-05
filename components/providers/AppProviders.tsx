@@ -1,5 +1,6 @@
 'use client';
 
+import '@/lib/intercept-console-error';
 import { UserProvider } from '@/contexts/UserContext';
 import { API_CONFIG } from '@/lib/config';
 import { ReactNode, useEffect } from 'react';
@@ -21,3 +22,4 @@ export function AppProviders({ children }: AppProvidersProps) {
     </UserProvider>
   );
 }
+
