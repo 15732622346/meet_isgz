@@ -291,10 +291,25 @@ export function UserProvider({ children }: UserProviderProps) {
 
 
         return accessToken;
-      } catch (error) {
+﻿﻿      } catch (error) {
         console.error('Token刷新失败:', error);
-        clearUserInfo();
-        throw new Error('Token过期，请重新登录');
+        const message = error instanceof Error ? error.message : String(error ?? '');
+        const knownAuthError =
+          typeof message === 'string' &&
+          (message.includes('过期') || message.includes('invalid') || message.includes('未登录'));
+
+        if (knownAuthError) {
+          clearUserInfo();
+          throw new Error('Token过期，请重新登录');
+        }
+
+        const fallbackToken = userInfo?.access_token || userInfo?.jwt_token;
+        if (fallbackToken) {
+          console.warn('Token刷新失败，继续沿用旧token');
+          return fallbackToken;
+        }
+
+        throw error instanceof Error ? error : new Error(String(error ?? 'Token刷新失败'));
       } finally {
         refreshPromiseRef.current = null;
       }
