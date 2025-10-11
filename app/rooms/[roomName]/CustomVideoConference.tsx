@@ -209,9 +209,9 @@ const [micGlobalMute, setMicGlobalMute] = React.useState(false);
     return 1;
   }, [userRole, userInfo?.user_roles, getCurrentUserRole]);
   const isGuest = resolvedUserRole === 0;
-  const isHostOrAdmin = resolvedUserRole === 2 || resolvedUserRole === 3;
+  const userIsHostOrAdmin = resolvedUserRole === 2 || resolvedUserRole === 3;
   
-  const isGlobalChatMutedForUser = !isHostOrAdmin && !isGuest && chatGlobalMute;
+  const isGlobalChatMutedForUser = !userIsHostOrAdmin && !isGuest && chatGlobalMute;
   const chatInputDisabled = isLocalUserDisabled || isGlobalChatMutedForUser;
   const chatPlaceholder = isGuest
     ? '游客需注册才能发言'
@@ -222,14 +222,14 @@ const [micGlobalMute, setMicGlobalMute] = React.useState(false);
     if (isLocalUserDisabled) {
       return '您已被主持人禁用，暂时无法发送消息';
     }
-    if (!isHostOrAdmin && !isGuest && chatGlobalMute) {
+    if (!userIsHostOrAdmin && !isGuest && chatGlobalMute) {
       return '主持人已开启全员禁言';
     }
     if (isGuest) {
       return '游客需注册才能发送消息';
     }
     return undefined;
-  }, [isGuest, isHostOrAdmin, isLocalUserDisabled, chatGlobalMute]);
+  }, [isGuest, userIsHostOrAdmin, isLocalUserDisabled, chatGlobalMute]);
   const handleGuestIntercept = React.useCallback(() => {
     guestClickHandler();
   }, [guestClickHandler]);
@@ -283,7 +283,7 @@ const [micGlobalMute, setMicGlobalMute] = React.useState(false);
       return false;
     }
     const now = Date.now();
-    if (!isHostOrAdmin) {
+    if (!userIsHostOrAdmin) {
       const elapsed = now - lastSentTimeRef.current;
       if (elapsed < MESSAGE_COOLDOWN) {
         const remainingSeconds = Math.ceil((MESSAGE_COOLDOWN - elapsed) / 1000);
@@ -318,7 +318,7 @@ const [micGlobalMute, setMicGlobalMute] = React.useState(false);
     ensureChatVisible,
     handleGuestIntercept,
     isGuest,
-    isHostOrAdmin,
+    userIsHostOrAdmin,
     sendChatMessageViaApi,
   ],
 );
@@ -1582,7 +1582,7 @@ const [micGlobalMute, setMicGlobalMute] = React.useState(false);
                               onMouseEnter={(e) => (e.target as HTMLElement).style.background = '#3a3a3a'}
                               onMouseLeave={(e) => (e.target as HTMLElement).style.background = 'transparent'}
                             >
-                              恢复全员发
+                              恢复全员发言
                             </button>
                           </div>
                         )}
@@ -1854,12 +1854,3 @@ const [micGlobalMute, setMicGlobalMute] = React.useState(false);
 // 简化版本：不再判断“主持人是否在场”，始终渲染会议界面
 // 🎯 使用官方组件的麦位列表
 // 🎯 麦位参与者瓦片组件 - 配合官方ParticipantLoop使用
-
-
-
-
-
-
-
-
-
