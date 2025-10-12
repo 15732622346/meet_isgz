@@ -48,6 +48,9 @@ import { UserAuthForm } from './UserAuthForm';
 import { ErrorToast } from '../../../components/ErrorToast';
 import { API_CONFIG } from '@/lib/config';
 
+const AUTH_STATUS_ENDPOINT = '/api/v1/auth/status';
+const ROOM_DETAIL_ENDPOINT = '/api/v1/rooms/detail';
+
 interface RoomSnapshot {
   roomId: string;
   roomName: string;
@@ -286,7 +289,7 @@ function PageClientImplInner(props: PageClientImplInnerProps) {
     setInviteSubmitting(true);
     try {
       const authResponse = await callGatewayApi<AuthStatusResponse>(
-        await API_CONFIG.getEndpoint('gateway_auth_status'),
+        AUTH_STATUS_ENDPOINT,
       );
 
       const authResult = normalizeGatewayResponse<AuthStatusResponse>(authResponse);
@@ -309,7 +312,7 @@ function PageClientImplInner(props: PageClientImplInnerProps) {
       };
 
       const roomResponse = await callGatewayApi<RoomDetailResponse>(
-        await API_CONFIG.getEndpoint('gateway_rooms_detail'),
+        ROOM_DETAIL_ENDPOINT,
         roomRequest,
         { method: 'GET' },
       );
@@ -398,7 +401,7 @@ function PageClientImplInner(props: PageClientImplInnerProps) {
       setLoading(true);
       try {
         const authResponse = await callGatewayApi<AuthStatusResponse>(
-          await API_CONFIG.getEndpoint('gateway_auth_status'),
+          AUTH_STATUS_ENDPOINT,
         );
 
         const authResult = normalizeGatewayResponse<AuthStatusResponse>(authResponse);
@@ -418,7 +421,7 @@ function PageClientImplInner(props: PageClientImplInnerProps) {
         setJwtToken(authData.jwt_token || '');
 
         const roomResponse = await callGatewayApi<RoomDetailResponse>(
-          await API_CONFIG.getEndpoint('gateway_rooms_detail'),
+          ROOM_DETAIL_ENDPOINT,
           roomRequest,
           { method: 'GET' },
         );

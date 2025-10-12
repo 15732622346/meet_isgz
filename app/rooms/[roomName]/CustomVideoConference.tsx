@@ -43,7 +43,6 @@ import { useRoomManagement } from './hooks/useRoomManagement';
 import { MainVideoDisplay, MainVideoDisplayNoHost } from './components/conference/MainVideoDisplay';
 import { MicParticipantList } from './components/conference/MicManagement';
 import { extractParticipantUid, normalizeUid } from './utils/conference-utils';
-import { API_CONFIG } from '@/lib/config';
 import { callGatewayApi, normalizeGatewayResponse } from '@/lib/api-client';
 import { resolveAssetPath } from '@/lib/assetPath';
 import { useUserContext } from '@/contexts/UserContext';
@@ -62,6 +61,8 @@ import {
   updateParticipantMetadata,
   getParticipantMetadataSource
 } from '../../../lib/token-utils';
+
+const BATCH_MICROPHONE_ENDPOINT = '/api/v1/participants/batch-set-microphone';
 
 export function CustomVideoConference({
   SettingsComponent,
@@ -631,7 +632,6 @@ const [micGlobalMute, setMicGlobalMute] = React.useState(false);
 
       try {
         const token = await resolveGatewayToken();
-        const endpoint = await API_CONFIG.getEndpoint('gateway_participants_batch_microphone');
         const payload = {
           room_id: roomInfo.name,
           host_user_id: operatorUid,
@@ -644,7 +644,7 @@ const [micGlobalMute, setMicGlobalMute] = React.useState(false);
             : { unmute_time: new Date().toISOString() }),
         };
 
-        const response = await callGatewayApi(endpoint, payload, {
+        const response = await callGatewayApi(BATCH_MICROPHONE_ENDPOINT, payload, {
           method: 'POST',
           headers: {
             Authorization: `Bearer ${token}`,

@@ -1,7 +1,6 @@
 'use client';
 
 import React from 'react';
-import { API_CONFIG } from '@/lib/config';
 import { callGatewayApi, normalizeGatewayResponse } from '@/lib/api-client';
 import { useUser } from '@/contexts/UserContext';
 import { getJwtExpiry } from '@/lib/token-utils';
@@ -12,6 +11,9 @@ import type {
   RoomDetailResponse
 } from '@/types/api';
 
+const AUTH_LOGIN_ENDPOINT = '/api/v1/auth/login';
+const AUTH_REGISTER_ENDPOINT = '/api/v1/auth/register';
+const ROOM_DETAIL_ENDPOINT = '/api/v1/rooms/detail';
 
 const parseAbsoluteTimestamp = (value?: number | string | null): number | undefined => {
   if (value === null || value === undefined) {
@@ -138,7 +140,7 @@ export function UserAuthForm({ onLoginSuccess, onGuestMode, roomName }: UserAuth
       };
 
       const loginResponse = await callGatewayApi<AuthLoginResponse>(
-        await API_CONFIG.getEndpoint('gateway_auth_login'),
+        AUTH_LOGIN_ENDPOINT,
         loginRequest,
         { method: 'POST' },
       );
@@ -172,7 +174,7 @@ export function UserAuthForm({ onLoginSuccess, onGuestMode, roomName }: UserAuth
       setLoadingMessage('正在验证邀请码...');
 
       const roomResponse = await callGatewayApi<RoomDetailResponse>(
-        await API_CONFIG.getEndpoint('gateway_rooms_detail'),
+        ROOM_DETAIL_ENDPOINT,
         roomRequest,
         { method: 'GET' },
       );
@@ -314,7 +316,7 @@ export function UserAuthForm({ onLoginSuccess, onGuestMode, roomName }: UserAuth
       };
 
       const registerResponse = await callGatewayApi<AuthLoginResponse>(
-        await API_CONFIG.getEndpoint('gateway_auth_register'),
+        AUTH_REGISTER_ENDPOINT,
         registerRequest,
         { method: 'POST' },
       );
@@ -374,7 +376,7 @@ export function UserAuthForm({ onLoginSuccess, onGuestMode, roomName }: UserAuth
       };
 
       const loginResponse = await callGatewayApi<AuthLoginResponse>(
-        await API_CONFIG.getEndpoint('gateway_auth_login'),
+        AUTH_LOGIN_ENDPOINT,
         loginRequest,
         { method: 'POST' },
       );
@@ -405,7 +407,7 @@ export function UserAuthForm({ onLoginSuccess, onGuestMode, roomName }: UserAuth
       };
 
       const roomResponse = await callGatewayApi<RoomDetailResponse>(
-        await API_CONFIG.getEndpoint('gateway_rooms_detail'),
+        ROOM_DETAIL_ENDPOINT,
         roomRequest,
         {
           method: 'POST',
